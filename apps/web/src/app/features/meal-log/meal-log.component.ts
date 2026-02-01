@@ -83,7 +83,7 @@ interface ParsedMeal {
             [(ngModel)]="mealInput"
             placeholder="E.g., 2 eggs with toast and a glass of orange juice"
             class="input min-h-[120px] resize-none"
-            (keydown.enter)="$event.ctrlKey && parseMeal()"
+            (keydown.control.enter)="parseMeal()"
           ></textarea>
           <p class="text-xs text-gray-500 mt-2">Tip: Be specific with quantities for better macro estimates</p>
         </div>

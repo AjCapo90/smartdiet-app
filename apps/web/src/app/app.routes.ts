@@ -1,6 +1,6 @@
 import { Routes } from '@angular/router';
 
-export const routes: Routes = [
+export const appRoutes: Routes = [
   {
     path: '',
     loadComponent: () => import('./layout/shell.component').then(m => m.ShellComponent),
