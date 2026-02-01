@@ -1,96 +1,135 @@
-# Calo
+# Calo - Adaptive Nutrition 🥗
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+**Complete your perfect nutrition week.**
 
-✨ Your new, shiny [Nx workspace](https://nx.dev) is ready ✨.
+Calo helps you stick to your diet plan with flexibility. Upload your nutritionist's meal plan, log what you actually eat, and get smart recommendations to hit your weekly macro targets.
 
-[Learn more about this workspace setup and its capabilities](https://nx.dev/getting-started/intro#learn-nx?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
+## Features
 
-## Run tasks
+- 📷 **Diet Plan Import** - Upload a photo of your diet plan (OCR extraction)
+- 🎤 **Voice Meal Logging** - Log meals by speaking naturally
+- 📊 **Weekly Progress** - Track macros with beautiful visualizations
+- 💡 **Smart Recommendations** - Get suggestions to complete your nutrition week
+- 🔄 **Flexible Eating** - Eat what you want, then compensate with adjusted meals
 
-To run tasks with Nx use:
+## Tech Stack
 
-```sh
-npx nx <target> <project-name>
+- **Monorepo**: NX 22.x
+- **Frontend**: Angular 21, Tailwind CSS
+- **Backend**: Fastify 5.x, TypeScript
+- **Database**: SQLite (dev) / PostgreSQL (prod)
+- **ORM**: Drizzle
+- **AI**: OpenAI Vision API (GPT-4o)
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 20+
+- npm 10+
+
+### Installation
+
+```bash
+# Clone the repo
+git clone https://github.com/AjCapo90/smartdiet-app.git
+cd smartdiet-app
+
+# Install dependencies
+npm install
+
+# Generate database
+npx drizzle-kit generate
+npx drizzle-kit migrate
+
+# Start development servers
+npm run dev
 ```
 
-For example:
+### Development
 
-```sh
-npx nx build myproject
+```bash
+# Start all apps
+npx nx run-many --target=serve --all
+
+# Start specific app
+npx nx serve web    # Angular frontend on http://localhost:4200
+npx nx serve api    # Fastify API on http://localhost:3000
+
+# Run tests
+npx nx test shared-types
+
+# Build for production
+npx nx build web --configuration=production
+npx nx build api --configuration=production
 ```
 
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
+## Project Structure
 
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Add new projects
-
-While you could add new projects to your workspace manually, you might want to leverage [Nx plugins](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) and their [code generation](https://nx.dev/features/generate-code?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) feature.
-
-To install a new plugin you can use the `nx add` command. Here's an example of adding the React plugin:
-```sh
-npx nx add @nx/react
+```
+calo/
+├── apps/
+│   ├── web/          # Angular frontend
+│   └── api/          # Fastify backend
+├── libs/
+│   └── shared/
+│       └── types/    # Shared TypeScript types
+├── docs/             # Documentation
+└── tools/            # Build scripts
 ```
 
-Use the plugin's generator to create new projects. For example, to create a new React app or library:
+## API Endpoints
 
-```sh
-# Generate an app
-npx nx g @nx/react:app demo
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/register` | Create account |
+| POST | `/api/auth/login` | Get JWT tokens |
+| GET | `/api/diet-plans` | List diet plans |
+| POST | `/api/diet-plans` | Create diet plan |
+| GET | `/api/meals` | List logged meals |
+| POST | `/api/meals` | Log a meal |
+| GET | `/api/progress/week` | Get weekly progress |
+| GET | `/api/progress/recommendations` | Get meal suggestions |
 
-# Generate a library
-npx nx g @nx/react:lib some-lib
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for full API documentation.
+
+## Environment Variables
+
+```env
+# API
+JWT_SECRET=your-secret-key
+COOKIE_SECRET=your-cookie-secret
+DATABASE_URL=calo.db
+OPENAI_API_KEY=sk-...  # For OCR/AI features
+
+# Frontend
+API_URL=http://localhost:3000
 ```
 
-You can use `npx nx list` to get a list of installed plugins. Then, run `npx nx list <plugin-name>` to learn about more specific capabilities of a particular plugin. Alternatively, [install Nx Console](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) to browse plugins and generators in your IDE.
+## Roadmap
 
-[Learn more about Nx plugins &raquo;](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) | [Browse the plugin registry &raquo;](https://nx.dev/plugin-registry?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+- [x] Project scaffold (NX + Angular + Fastify)
+- [x] Core data models
+- [x] Authentication flow
+- [x] Dashboard UI
+- [x] Meal logging with voice input
+- [x] Weekly progress tracking
+- [ ] Diet plan OCR extraction
+- [ ] AI meal parsing
+- [ ] Push notifications
+- [ ] PWA support
 
-## Set up CI!
+## Contributing
 
-### Step 1
+1. Create a feature branch: `git checkout -b feat/your-feature`
+2. Commit your changes: `git commit -m 'feat: add something'`
+3. Push to the branch: `git push origin feat/your-feature`
+4. Open a Pull Request
 
-To connect to Nx Cloud, run the following command:
+## License
 
-```sh
-npx nx connect
-```
+MIT
 
-Connecting to Nx Cloud ensures a [fast and scalable CI](https://nx.dev/ci/intro/why-nx-cloud?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) pipeline. It includes features such as:
+---
 
-- [Remote caching](https://nx.dev/ci/features/remote-cache?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task distribution across multiple machines](https://nx.dev/ci/features/distribute-task-execution?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Automated e2e test splitting](https://nx.dev/ci/features/split-e2e-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task flakiness detection and rerunning](https://nx.dev/ci/features/flaky-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-### Step 2
-
-Use the following command to configure a CI workflow for your workspace:
-
-```sh
-npx nx g ci-workflow
-```
-
-[Learn more about Nx on CI](https://nx.dev/ci/intro/ci-with-nx#ready-get-started-with-your-provider?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Install Nx Console
-
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
-
-[Install Nx Console &raquo;](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Useful links
-
-Learn more:
-
-- [Learn more about this workspace setup](https://nx.dev/getting-started/intro#learn-nx?utm_source=nx_project&amp;utm_medium=readme&amp;utm_campaign=nx_projects)
-- [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-And join the Nx community:
-- [Discord](https://go.nx.dev/community)
-- [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [Our Youtube channel](https://www.youtube.com/@nxdevtools)
-- [Our blog](https://nx.dev/blog?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+Built with ❤️ by Alessandro & Hex ⬡

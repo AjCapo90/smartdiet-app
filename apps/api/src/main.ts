@@ -1,23 +1,18 @@
-import Fastify from 'fastify';
-import { app } from './app/app';
+import { buildApp } from './app/app';
 
 const host = process.env.HOST ?? 'localhost';
 const port = process.env.PORT ? Number(process.env.PORT) : 3000;
 
-// Instantiate Fastify with some config
-const server = Fastify({
-  logger: true,
-});
+async function main() {
+  const app = await buildApp();
 
-// Register your application as a normal plugin.
-server.register(app);
-
-// Start listening.
-server.listen({ port, host }, (err) => {
-  if (err) {
-    server.log.error(err);
+  try {
+    await app.listen({ port, host });
+    console.log(`🚀 Calo API running at http://${host}:${port}`);
+  } catch (err) {
+    app.log.error(err);
     process.exit(1);
-  } else {
-    console.log(`[ ready ] http://${host}:${port}`);
   }
-});
+}
+
+main();
