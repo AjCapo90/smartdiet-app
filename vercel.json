@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/parse-diet.ts": {
+      "maxDuration": 60
+    }
+  }
+}

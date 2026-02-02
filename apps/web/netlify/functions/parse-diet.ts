@@ -59,22 +59,34 @@ export default async function handler(req: Request, context: Context) {
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
     const xaiKey = process.env.XAI_API_KEY;
 
+    // Debug: log which keys are available
+    console.log('Keys available:', {
+      openai: !!openaiKey,
+      anthropic: !!anthropicKey,
+      xai: !!xaiKey
+    });
+
     let result;
+    let provider = 'none';
     const startTime = Date.now();
 
     if (openaiKey) {
+      provider = 'openai';
       console.log('Using OpenAI GPT-4o');
       result = await callOpenAI(openaiKey, image, mimeType);
     } else if (xaiKey) {
+      provider = 'xai';
       console.log('Using xAI Grok');
       result = await callXAI(xaiKey, image, mimeType);
     } else if (anthropicKey) {
+      provider = 'anthropic';
       console.log('Using Anthropic Claude');
       result = await callAnthropic(anthropicKey, image, mimeType);
     } else {
       return new Response(JSON.stringify({ 
         error: 'No API key configured',
-        details: 'Set OPENAI_API_KEY, XAI_API_KEY, or ANTHROPIC_API_KEY'
+        details: 'Set OPENAI_API_KEY, XAI_API_KEY, or ANTHROPIC_API_KEY',
+        keysFound: { openai: !!openaiKey, xai: !!xaiKey, anthropic: !!anthropicKey }
       }), { status: 500, headers });
     }
 
