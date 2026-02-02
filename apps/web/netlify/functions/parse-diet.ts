@@ -1,10 +1,11 @@
 import type { Context } from '@netlify/functions';
 
-// Prompt ultra-minimale per risposta rapida
-const PROMPT = `Leggi la dieta dalla foto. Output JSON compatto:
-{"d":[{"g":"Lun","m":[{"t":"b","f":["40g farina avena","1 uovo"]}]}]}
-g=giorno(Lun/Mar/Mer/Gio/Ven/Sab/Dom), t=tipo(b=colazione,sm=spuntino mattina,l=pranzo,sp=spuntino pomeriggio,c=cena), f=lista cibi con quantità.
-Estrai TUTTI i giorni e TUTTI i pasti. Solo JSON.`;
+const STRUCTURE_PROMPT = `Sei un parser di diete. Ti passo il testo OCR di una dieta settimanale italiana (tabella).
+Struttura i dati in JSON:
+{"days":[{"day":"Lunedì","meals":[{"type":"breakfast","time":"8:30","foods":[{"name":"farina avena","qty":40,"unit":"g"}]}]}]}
+
+Tipi pasto: breakfast, morning_snack, lunch, afternoon_snack, dinner.
+Estrai OGNI alimento con quantità e unità. "ev."=opzionale. Solo JSON, niente altro.`;
 
 export default async function handler(req: Request, context: Context) {
   const headers = {
@@ -14,197 +15,118 @@ export default async function handler(req: Request, context: Context) {
     'Content-Type': 'application/json',
   };
 
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers });
-  }
-
-  if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405, headers,
-    });
-  }
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers });
+  if (req.method !== 'POST') return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers });
 
   try {
     const body = await req.json();
     const { image, mimeType = 'image/jpeg', debug } = body;
 
-    // Debug mode: just show which keys are configured
     if (debug) {
       return new Response(JSON.stringify({
         debug: true,
         keysConfigured: {
+          google: !!process.env.GOOGLE_CLOUD_API_KEY,
           openai: !!process.env.OPENAI_API_KEY,
-          xai: !!process.env.XAI_API_KEY,
-          anthropic: !!process.env.ANTHROPIC_API_KEY
-        },
-        willUse: process.env.OPENAI_API_KEY ? 'openai' : 
-                 process.env.XAI_API_KEY ? 'xai' : 
-                 process.env.ANTHROPIC_API_KEY ? 'anthropic' : 'none'
+        }
       }), { status: 200, headers });
     }
 
     if (!image) {
-      return new Response(JSON.stringify({ error: 'No image provided' }), {
-        status: 400, headers,
-      });
+      return new Response(JSON.stringify({ error: 'No image' }), { status: 400, headers });
     }
 
+    const googleKey = process.env.GOOGLE_CLOUD_API_KEY;
     const openaiKey = process.env.OPENAI_API_KEY;
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
-    const xaiKey = process.env.XAI_API_KEY;
 
-    // Debug: log which keys are available
-    console.log('Keys available:', {
-      openai: !!openaiKey,
-      anthropic: !!anthropicKey,
-      xai: !!xaiKey
-    });
-
-    let result;
-    let provider = 'none';
     const startTime = Date.now();
+    let ocrText: string;
+    let ocrProvider: string;
 
-    if (openaiKey) {
-      provider = 'openai';
-      console.log('Using OpenAI GPT-4o');
-      result = await callOpenAI(openaiKey, image, mimeType);
-    } else if (xaiKey) {
-      provider = 'xai';
-      console.log('Using xAI Grok');
-      result = await callXAI(xaiKey, image, mimeType);
-    } else if (anthropicKey) {
-      provider = 'anthropic';
-      console.log('Using Anthropic Claude');
-      result = await callAnthropic(anthropicKey, image, mimeType);
+    // Step 1: OCR - prefer Google Cloud Vision (fast), fallback to OpenAI Vision
+    if (googleKey) {
+      console.log('Using Google Cloud Vision for OCR...');
+      ocrText = await googleVisionOCR(googleKey, image);
+      ocrProvider = 'google-vision';
+    } else if (openaiKey) {
+      console.log('Using OpenAI Vision for OCR (slower)...');
+      ocrText = await openaiVisionOCR(openaiKey, image, mimeType);
+      ocrProvider = 'openai-vision';
     } else {
       return new Response(JSON.stringify({ 
         error: 'No API key configured',
-        details: 'Set OPENAI_API_KEY, XAI_API_KEY, or ANTHROPIC_API_KEY',
-        keysFound: { openai: !!openaiKey, xai: !!xaiKey, anthropic: !!anthropicKey }
+        details: 'Set GOOGLE_CLOUD_API_KEY (recommended) or OPENAI_API_KEY'
       }), { status: 500, headers });
     }
 
-    console.log(`Completed in ${Date.now() - startTime}ms`);
+    const ocrTime = Date.now() - startTime;
+    console.log(`OCR completed in ${ocrTime}ms, text length: ${ocrText.length}`);
 
-    return new Response(JSON.stringify({ 
-      success: true, 
-      data: result.data,
-      provider: result.provider,
-      timeMs: Date.now() - startTime
+    if (!ocrText || ocrText.length < 50) {
+      return new Response(JSON.stringify({ 
+        error: 'OCR failed to extract text',
+        details: 'Could not read text from image'
+      }), { status: 400, headers });
+    }
+
+    // Step 2: Structure with GPT (text-only = fast!)
+    if (!openaiKey) {
+      return new Response(JSON.stringify({ 
+        error: 'OPENAI_API_KEY required for text structuring'
+      }), { status: 500, headers });
+    }
+
+    console.log('Structuring with GPT-4o-mini...');
+    const structuredData = await structureWithGPT(openaiKey, ocrText);
+    const totalTime = Date.now() - startTime;
+
+    console.log(`Total time: ${totalTime}ms (OCR: ${ocrTime}ms)`);
+
+    return new Response(JSON.stringify({
+      success: true,
+      data: structuredData,
+      provider: `${ocrProvider} + gpt-4o-mini`,
+      timeMs: totalTime,
+      ocrTimeMs: ocrTime
     }), { status: 200, headers });
 
-  } catch (error: any) {
-    console.error('Parse diet error:', error?.message || error);
+  } catch (e: any) {
+    console.error('Error:', e?.message);
     return new Response(JSON.stringify({ 
-      error: 'Failed to parse diet plan',
-      details: error?.message || String(error)
+      error: 'Failed to parse diet',
+      details: e?.message 
     }), { status: 500, headers });
   }
 }
 
-async function callXAI(apiKey: string, image: string, mimeType: string) {
-  const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
+async function googleVisionOCR(apiKey: string, imageBase64: string): Promise<string> {
+  const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
   
-  // Usa grok-2-vision con streaming per evitare timeout
-  const model = 'grok-2-vision-1212';
-  console.log(`Calling xAI ${model} with streaming...`);
-  
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 24000); // 24 sec timeout
-  
-  try {
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{
-          role: 'user',
-          content: [
-            {
-              type: 'image_url',
-              image_url: { 
-                url: `data:${mimeType};base64,${base64Data}`,
-                detail: 'low' // Use low detail for faster processing
-              },
-            },
-            { type: 'text', text: PROMPT },
-          ],
-        }],
-        max_tokens: 3000,
-        temperature: 0,
-      }),
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`xAI error: ${response.status} ${error}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-    
-    if (!content) {
-      throw new Error('No content in xAI response');
-    }
-
-    return {
-      provider: `xai/${model}`,
-      data: parseJsonResponse(content)
-    };
-  } catch (e: any) {
-    clearTimeout(timeoutId);
-    if (e.name === 'AbortError') {
-      throw new Error('xAI timeout after 24 seconds');
-    }
-    throw e;
-  }
-}
-
-async function callAnthropic(apiKey: string, image: string, mimeType: string) {
-  const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
-  
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4000,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64Data } },
-          { type: 'text', text: PROMPT },
-        ],
-      }],
-    }),
+      requests: [{
+        image: { content: base64Data },
+        features: [{ type: 'DOCUMENT_TEXT_DETECTION' }]
+      }]
+    })
   });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Anthropic error: ${response.status} ${error}`);
+    throw new Error(`Google Vision error: ${response.status} ${error}`);
   }
 
   const data = await response.json();
-  const content = data.content?.[0]?.text;
+  const text = data.responses?.[0]?.fullTextAnnotation?.text || 
+               data.responses?.[0]?.textAnnotations?.[0]?.description || '';
   
-  if (!content) throw new Error('No content in Anthropic response');
-
-  return { provider: 'anthropic/claude-sonnet', data: parseJsonResponse(content) };
+  return text;
 }
 
-async function callOpenAI(apiKey: string, image: string, mimeType: string) {
-  const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
+async function openaiVisionOCR(apiKey: string, imageBase64: string, mimeType: string): Promise<string> {
+  const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
   
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -213,45 +135,64 @@ async function callOpenAI(apiKey: string, image: string, mimeType: string) {
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-4o-mini', // Faster for simple extraction
+      model: 'gpt-4o-mini',
       messages: [{
         role: 'user',
         content: [
           { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}` } },
-          { type: 'text', text: PROMPT },
-        ],
+          { type: 'text', text: 'Estrai TUTTO il testo visibile in questa immagine, mantenendo la struttura tabellare. Solo testo, niente commenti.' }
+        ]
       }],
       max_tokens: 4000,
-      temperature: 0.1,
-    }),
+      temperature: 0
+    })
   });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`OpenAI error: ${response.status} ${error}`);
+    throw new Error(`OpenAI Vision error: ${response.status} ${error}`);
   }
 
   const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
-  
-  if (!content) throw new Error('No content in OpenAI response');
-
-  return { provider: 'openai/gpt-4o', data: parseJsonResponse(content) };
+  return data.choices?.[0]?.message?.content || '';
 }
 
-function parseJsonResponse(content: string): any {
-  let text = content.trim();
+async function structureWithGPT(apiKey: string, ocrText: string): Promise<any> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: STRUCTURE_PROMPT },
+        { role: 'user', content: ocrText }
+      ],
+      max_tokens: 4000,
+      temperature: 0
+    })
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`GPT error: ${response.status} ${error}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || '';
   
-  // Remove markdown code blocks
+  // Parse JSON from response
+  let text = content.trim();
   const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (match) text = match[1].trim();
   
-  // Find JSON object
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
   if (start !== -1 && end !== -1) {
     text = text.substring(start, end + 1);
   }
-
+  
   return JSON.parse(text);
 }
