@@ -63,10 +63,16 @@ export class OcrService {
     this.lastError.set(null);
 
     try {
-      // Resize image if needed (max 1000px for optimal OCR)
+      // Resize image (800px max for mobile compatibility)
       this.progress.set(5);
       this.status.set('Ottimizzazione immagine...');
-      const optimizedFile = await this.resizeImage(imageFile, 1000, 0.85);
+      let optimizedFile: File;
+      try {
+        optimizedFile = await this.resizeImage(imageFile, 800, 0.8);
+      } catch (resizeError) {
+        console.error('Resize failed, using original:', resizeError);
+        optimizedFile = imageFile; // Fallback to original
+      }
       
       console.log(`Image optimized: ${(imageFile.size / 1024).toFixed(0)}KB -> ${(optimizedFile.size / 1024).toFixed(0)}KB`);
 
@@ -78,29 +84,42 @@ export class OcrService {
       this.status.set('Invio all\'AI per analisi...');
       this.progress.set(30);
 
-      console.log('Sending to API:', this.API_URL, 'Image size:', base64.length, 'bytes');
+      console.log('Sending to API:', this.API_URL, 'Base64 length:', base64.length);
+
+      // Check payload size (max ~5MB for most browsers)
+      if (base64.length > 5 * 1024 * 1024) {
+        throw new Error('Immagine troppo grande. Prova con una foto più piccola.');
+      }
 
       // Call the Netlify function with timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 min timeout
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
 
       let response: Response;
       try {
+        const payload = JSON.stringify({
+          image: base64,
+          mimeType: optimizedFile.type || 'image/jpeg',
+        });
+        console.log('Payload size:', (payload.length / 1024).toFixed(0), 'KB');
+        
         response = await fetch(this.API_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            image: base64,
-            mimeType: imageFile.type || 'image/jpeg',
-          }),
+          body: payload,
           signal: controller.signal,
         });
       } catch (fetchError: any) {
         clearTimeout(timeoutId);
+        console.error('Fetch error:', fetchError);
         if (fetchError.name === 'AbortError') {
-          throw new Error('Timeout: l\'analisi sta impiegando troppo tempo. Riprova con un\'immagine più piccola.');
+          throw new Error('Timeout: l\'analisi sta impiegando troppo tempo.');
+        }
+        // More specific error for Safari "Load failed"
+        if (fetchError.message === 'Load failed' || fetchError.message === 'Failed to fetch') {
+          throw new Error('Connessione fallita. Verifica la connessione internet e riprova.');
         }
         throw new Error(`Errore di rete: ${fetchError.message}`);
       }
