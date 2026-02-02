@@ -81,19 +81,19 @@ export default async function handler(req: Request, context: Context) {
       });
     }
 
-    // Try xAI/Grok first, then fall back to Anthropic, then OpenAI
-    const xaiKey = process.env.XAI_API_KEY;
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    // Try OpenAI first (fastest), then Anthropic, then xAI/Grok
     const openaiKey = process.env.OPENAI_API_KEY;
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    const xaiKey = process.env.XAI_API_KEY;
 
     let result;
 
-    if (xaiKey) {
-      result = await callXAI(xaiKey, image, mimeType);
+    if (openaiKey) {
+      result = await callOpenAI(openaiKey, image, mimeType);
     } else if (anthropicKey) {
       result = await callAnthropic(anthropicKey, image, mimeType);
-    } else if (openaiKey) {
-      result = await callOpenAI(openaiKey, image, mimeType);
+    } else if (xaiKey) {
+      result = await callXAI(xaiKey, image, mimeType);
     } else {
       return new Response(JSON.stringify({ 
         error: 'No API key configured',
