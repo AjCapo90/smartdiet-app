@@ -47,7 +47,22 @@ export default async function handler(req: Request, context: Context) {
 
   try {
     const body = await req.json();
-    const { image, mimeType = 'image/jpeg' } = body;
+    const { image, mimeType = 'image/jpeg', debug } = body;
+
+    // Debug mode: just show which keys are configured
+    if (debug) {
+      return new Response(JSON.stringify({
+        debug: true,
+        keysConfigured: {
+          openai: !!process.env.OPENAI_API_KEY,
+          xai: !!process.env.XAI_API_KEY,
+          anthropic: !!process.env.ANTHROPIC_API_KEY
+        },
+        willUse: process.env.OPENAI_API_KEY ? 'openai' : 
+                 process.env.XAI_API_KEY ? 'xai' : 
+                 process.env.ANTHROPIC_API_KEY ? 'anthropic' : 'none'
+      }), { status: 200, headers });
+    }
 
     if (!image) {
       return new Response(JSON.stringify({ error: 'No image provided' }), {
