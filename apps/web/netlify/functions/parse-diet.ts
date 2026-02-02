@@ -1,5 +1,5 @@
 import type { Context } from '@netlify/functions';
-import sharp from 'sharp';
+import Jimp from 'jimp';
 
 const STRUCTURE_PROMPT = `Parse diet text to JSON. Format: {"days":[{"day":"Lun","meals":[{"t":"b","f":["40g avena","1 uovo"]}]}]}
 t=b(breakfast),s(snack),l(lunch),d(dinner). Keep food strings short. JSON only.`;
@@ -38,12 +38,16 @@ export default async function handler(req: Request, context: Context) {
       
       console.log(`Input file: ${file.name}, ${(file.size/1024).toFixed(0)}KB`);
       
-      // Resize to max 1200px and compress to 80% quality
-      const resizedBuffer = await sharp(inputBuffer)
-        .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 80 })
-        .toBuffer();
+      // Resize to max 1200px using Jimp (pure JS, serverless compatible)
+      const jimpImage = await Jimp.read(inputBuffer);
+      const { width, height } = jimpImage.bitmap;
       
+      if (width > 1200 || height > 1200) {
+        jimpImage.scaleToFit(1200, 1200);
+      }
+      jimpImage.quality(80);
+      
+      const resizedBuffer = await jimpImage.getBufferAsync(Jimp.MIME_JPEG);
       image = resizedBuffer.toString('base64');
       mimeType = 'image/jpeg';
       
