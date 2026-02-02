@@ -1,9 +1,10 @@
 import type { Context } from '@netlify/functions';
 
-// Prompt ultra-conciso
-const PROMPT = `Estrai la dieta dalla foto in JSON. Formato:
-{"days":[{"day":"Lunedì","meals":[{"type":"breakfast","foods":[{"name":"cibo","qty":100,"unit":"g"}]}]}]}
-type: breakfast/morning_snack/lunch/afternoon_snack/dinner. Solo JSON, niente altro.`;
+// Prompt conciso ma completo
+const PROMPT = `Estrai TUTTI gli alimenti dalla dieta in foto.
+JSON: {"days":[{"day":"Lunedì","meals":[{"type":"breakfast","foods":[{"name":"farina avena","qty":40,"unit":"g"}]}]}]}
+Tipi pasto: breakfast (colazione), morning_snack (spuntino mattina), lunch (pranzo), afternoon_snack (spuntino pomeriggio), dinner (cena).
+Estrai nome esatto, quantità e unità di OGNI alimento. Solo JSON.`;
 
 export default async function handler(req: Request, context: Context) {
   const headers = {
