@@ -63,23 +63,13 @@ export class OcrService {
     this.lastError.set(null);
 
     try {
-      // Resize image (800px max for mobile compatibility)
-      this.progress.set(5);
-      this.status.set('Ottimizzazione immagine...');
-      let optimizedFile: File;
-      try {
-        optimizedFile = await this.resizeImage(imageFile, 800, 0.8);
-      } catch (resizeError) {
-        console.error('Resize failed, using original:', resizeError);
-        optimizedFile = imageFile; // Fallback to original
-      }
+      // Convert file to base64 directly (resize causes issues on iOS)
+      this.progress.set(10);
+      this.status.set(`Preparazione immagine (${(imageFile.size / 1024).toFixed(0)}KB)...`);
+      const base64 = await this.fileToBase64(imageFile);
+      const optimizedFile = imageFile; // Keep reference for later
       
-      console.log(`Image optimized: ${(imageFile.size / 1024).toFixed(0)}KB -> ${(optimizedFile.size / 1024).toFixed(0)}KB`);
-
-      // Convert file to base64
-      this.progress.set(15);
-      this.status.set(`Preparazione immagine (${(optimizedFile.size / 1024).toFixed(0)}KB)...`);
-      const base64 = await this.fileToBase64(optimizedFile);
+      console.log(`Image size: ${(imageFile.size / 1024).toFixed(0)}KB, base64: ${(base64.length / 1024).toFixed(0)}KB`);
       
       this.status.set('Invio all\'AI per analisi...');
       this.progress.set(30);
