@@ -53,7 +53,7 @@ export class OcrService {
   lastError = signal<string | null>(null);
 
   private readonly API_URL = environment.production 
-    ? '/api/parse-diet' 
+    ? '/.netlify/functions/parse-diet' 
     : 'http://localhost:8888/.netlify/functions/parse-diet';
 
   async parseDietPlanFromImage(imageFile: File): Promise<ParsedDietPlan> {

@@ -230,7 +230,7 @@ export class NutritionService {
   status = signal('');
 
   private readonly API_URL = environment.production
-    ? '/api/nutrition-lookup'
+    ? '/.netlify/functions/nutrition-lookup'
     : 'http://localhost:8888/.netlify/functions/nutrition-lookup';
 
   // Local lookup - instant, no API call
