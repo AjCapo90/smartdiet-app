@@ -63,49 +63,27 @@ export class OcrService {
     this.lastError.set(null);
 
     try {
-      // Compress image for upload (iOS compatible method)
       this.progress.set(10);
-      this.status.set('Compressione immagine...');
+      this.status.set('Preparazione upload...');
       
-      let base64: string;
-      try {
-        base64 = await this.compressImageForUpload(imageFile, 1200, 0.7);
-        console.log(`Compressed: ${(imageFile.size / 1024).toFixed(0)}KB -> ${(base64.length / 1024).toFixed(0)}KB base64`);
-      } catch (e) {
-        console.error('Compression failed, using original:', e);
-        base64 = await this.fileToBase64(imageFile);
-      }
+      // Use FormData - native file upload, much more iOS compatible
+      const formData = new FormData();
+      formData.append('image', imageFile);
       
-      const optimizedFile = imageFile;
+      console.log('Uploading file:', imageFile.name, (imageFile.size / 1024).toFixed(0), 'KB');
       
       this.status.set('Invio all\'AI per analisi...');
       this.progress.set(30);
 
-      console.log('Sending to API:', this.API_URL, 'Base64 length:', base64.length);
-
-      // Check payload size (max ~2MB after compression should be fine)
-      if (base64.length > 3 * 1024 * 1024) {
-        throw new Error('Immagine ancora troppo grande dopo compressione. Prova con una foto a risoluzione più bassa.');
-      }
-
       // Call the Netlify function with timeout
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s timeout
 
       let response: Response;
       try {
-        const payload = JSON.stringify({
-          image: base64,
-          mimeType: optimizedFile.type || 'image/jpeg',
-        });
-        console.log('Payload size:', (payload.length / 1024).toFixed(0), 'KB');
-        
         response = await fetch(this.API_URL, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: payload,
+          body: formData, // FormData auto-sets Content-Type with boundary
           signal: controller.signal,
         });
       } catch (fetchError: any) {
@@ -114,11 +92,7 @@ export class OcrService {
         if (fetchError.name === 'AbortError') {
           throw new Error('Timeout: l\'analisi sta impiegando troppo tempo.');
         }
-        // More specific error for Safari "Load failed"
-        if (fetchError.message === 'Load failed' || fetchError.message === 'Failed to fetch') {
-          throw new Error('Connessione fallita. Verifica la connessione internet e riprova.');
-        }
-        throw new Error(`Errore di rete: ${fetchError.message}`);
+        throw new Error(`Errore upload: ${fetchError.message || 'Connessione fallita'}`);
       }
       clearTimeout(timeoutId);
 

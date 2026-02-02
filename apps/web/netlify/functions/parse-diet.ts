@@ -15,8 +15,43 @@ export default async function handler(req: Request, context: Context) {
   if (req.method !== 'POST') return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers });
 
   try {
-    const body = await req.json();
-    const { image, mimeType = 'image/jpeg', debug } = body;
+    let image: string;
+    let mimeType = 'image/jpeg';
+    let debug = false;
+    let ocrOnly = false;
+
+    const contentType = req.headers.get('content-type') || '';
+    
+    if (contentType.includes('multipart/form-data')) {
+      // Handle FormData upload (iOS compatible)
+      const formData = await req.formData();
+      const file = formData.get('image') as File | null;
+      
+      if (!file) {
+        return new Response(JSON.stringify({ error: 'No image in form data' }), { status: 400, headers });
+      }
+      
+      // Convert file to base64
+      const arrayBuffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.subarray(i, i + chunkSize);
+        binary += String.fromCharCode.apply(null, Array.from(chunk));
+      }
+      image = btoa(binary);
+      mimeType = file.type || 'image/jpeg';
+      
+      console.log(`FormData file: ${file.name}, ${(file.size/1024).toFixed(0)}KB, ${mimeType}`);
+    } else {
+      // Handle JSON body
+      const body = await req.json();
+      image = body.image || '';
+      mimeType = body.mimeType || 'image/jpeg';
+      debug = body.debug || false;
+      ocrOnly = body.ocrOnly || false;
+    }
 
     if (debug) {
       return new Response(JSON.stringify({
@@ -29,7 +64,7 @@ export default async function handler(req: Request, context: Context) {
     }
 
     if (!image) {
-      return new Response(JSON.stringify({ error: 'No image' }), { status: 400, headers });
+      return new Response(JSON.stringify({ error: 'No image provided' }), { status: 400, headers });
     }
 
     const googleKey = process.env.GOOGLE_CLOUD_API_KEY;
