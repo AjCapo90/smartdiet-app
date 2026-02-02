@@ -27,28 +27,66 @@ export interface BulkLookupResult {
   manual: number;
 }
 
+// Brand mapping - maps brand names to generic food
+const BRAND_MAP: Record<string, string> = {
+  'wasa': 'crackers integrali',
+  'wasa integrali': 'crackers integrali',
+  'enervit': 'biscotti proteici',
+  'biscotti in zona': 'biscotti proteici',
+  'biscotti zona': 'biscotti proteici',
+  'yoegges': 'yogurt albume',
+  'yogurt albume': 'yogurt proteico',
+  'iperal': 'yogurt proteico',
+  'philadelphia': 'formaggio spalmabile',
+  'activia': 'yogurt',
+  'mulino bianco': 'biscotti',
+  'barilla': 'pasta',
+  'de cecco': 'pasta',
+  'garofalo': 'pasta',
+  'scotti': 'riso',
+  'muller': 'yogurt',
+  'danone': 'yogurt',
+  'galbani': 'mozzarella',
+  'sojasun': 'yogurt soia',
+  'alpro': 'latte vegetale',
+};
+
 // Local database of common Italian foods (per 100g unless noted)
 const LOCAL_FOOD_DB: Record<string, { cal: number; p: number; c: number; f: number; servingG?: number }> = {
   // Cereali e derivati
   'avena': { cal: 389, p: 16.9, c: 66.3, f: 6.9 },
   'fiocchi di avena': { cal: 389, p: 16.9, c: 66.3, f: 6.9 },
   'fiocchi avena': { cal: 389, p: 16.9, c: 66.3, f: 6.9 },
+  'farina avena': { cal: 389, p: 16.9, c: 66.3, f: 6.9 },
+  'farina/fiocchi avena': { cal: 389, p: 16.9, c: 66.3, f: 6.9 },
   'riso': { cal: 130, p: 2.7, c: 28, f: 0.3 },
   'riso basmati': { cal: 121, p: 3.5, c: 25.2, f: 0.4 },
   'riso integrale': { cal: 111, p: 2.6, c: 23, f: 0.9 },
+  'spaghetti di riso': { cal: 109, p: 0.9, c: 25, f: 0.2 },
   'pasta': { cal: 131, p: 5, c: 25, f: 1.1 },
   'pasta integrale': { cal: 124, p: 5.3, c: 25, f: 0.9 },
+  'pasta di lenticchi': { cal: 120, p: 9, c: 20, f: 1.5 },
+  'pasta di ceci': { cal: 130, p: 8, c: 22, f: 2 },
+  'gnocchi': { cal: 133, p: 3.2, c: 28, f: 0.8 },
+  'gnocchi di patate': { cal: 133, p: 3.2, c: 28, f: 0.8 },
+  'piadina': { cal: 310, p: 8, c: 48, f: 10, servingG: 80 },
+  'piadina integrale': { cal: 290, p: 9, c: 45, f: 8, servingG: 80 },
   'pane': { cal: 265, p: 9, c: 49, f: 3.2 },
   'pane integrale': { cal: 247, p: 13, c: 41, f: 4.2 },
-  'fette biscottate': { cal: 408, p: 11, c: 75, f: 6 },
-  'fette biscottate integrali': { cal: 395, p: 12, c: 68, f: 7 },
-  'crackers': { cal: 428, p: 10, c: 72, f: 10 },
-  'gallette di riso': { cal: 387, p: 8, c: 81, f: 2.8 },
-  'biscotti': { cal: 450, p: 6, c: 70, f: 16 },
-  'biscotti secchi': { cal: 416, p: 8, c: 77, f: 8.5 },
+  'fette biscottate': { cal: 408, p: 11, c: 75, f: 6, servingG: 10 },
+  'fette biscottate integrali': { cal: 395, p: 12, c: 68, f: 7, servingG: 10 },
+  'fetta di pane': { cal: 265, p: 9, c: 49, f: 3.2, servingG: 40 },
+  'crackers': { cal: 428, p: 10, c: 72, f: 10, servingG: 7 },
+  'crackers integrali': { cal: 410, p: 12, c: 65, f: 12, servingG: 12 },
+  'gallette': { cal: 387, p: 8, c: 81, f: 2.8, servingG: 9 },
+  'gallette di riso': { cal: 387, p: 8, c: 81, f: 2.8, servingG: 9 },
+  'biscotti': { cal: 450, p: 6, c: 70, f: 16, servingG: 10 },
+  'biscotti secchi': { cal: 416, p: 8, c: 77, f: 8.5, servingG: 10 },
+  'biscotti proteici': { cal: 380, p: 15, c: 50, f: 12, servingG: 8 },
   'cereali': { cal: 378, p: 8, c: 80, f: 3 },
   'muesli': { cal: 367, p: 10, c: 66, f: 6 },
   'corn flakes': { cal: 378, p: 7, c: 84, f: 0.9 },
+  'cornflakes': { cal: 378, p: 7, c: 84, f: 0.9 },
 
   // Proteine
   'pollo': { cal: 165, p: 31, c: 0, f: 3.6 },
@@ -195,6 +233,33 @@ const LOCAL_FOOD_DB: Record<string, { cal: number; p: number; c: number; f: numb
   'farro': { cal: 338, p: 14.6, c: 72, f: 2.5 },
   'couscous': { cal: 112, p: 3.8, c: 23, f: 0.2 },
   'polenta': { cal: 70, p: 1.5, c: 15, f: 0.3 },
+
+  // Integratori e proteine
+  'proteine': { cal: 120, p: 24, c: 3, f: 1, servingG: 30 },
+  'proteine in polvere': { cal: 120, p: 24, c: 3, f: 1, servingG: 30 },
+  'shake proteine': { cal: 120, p: 24, c: 3, f: 1, servingG: 30 },
+  'shake proteico': { cal: 120, p: 24, c: 3, f: 1, servingG: 30 },
+  'scup proteine': { cal: 120, p: 24, c: 3, f: 1, servingG: 30 },
+  'multivit': { cal: 0, p: 0, c: 0, f: 0, servingG: 1 },
+  'multivitaminico': { cal: 0, p: 0, c: 0, f: 0, servingG: 1 },
+  'omega 3': { cal: 10, p: 0, c: 0, f: 1, servingG: 1 },
+  'multivit + omega 3': { cal: 10, p: 0, c: 0, f: 1, servingG: 1 },
+  'multivit+ omega 3': { cal: 10, p: 0, c: 0, f: 1, servingG: 1 },
+
+  // Prodotti specifici
+  'yogurt proteico': { cal: 70, p: 10, c: 5, f: 0.5, servingG: 150 },
+  'yogurt albume': { cal: 50, p: 8, c: 4, f: 0, servingG: 150 },
+  'yogurt soia': { cal: 54, p: 4, c: 6, f: 2, servingG: 125 },
+  'yogurt vegetale': { cal: 60, p: 3, c: 8, f: 2, servingG: 125 },
+  'latte vegetale': { cal: 40, p: 1, c: 6, f: 1.5, servingG: 200 },
+  'tar tar': { cal: 150, p: 25, c: 1, f: 5 },
+  'tartare': { cal: 150, p: 25, c: 1, f: 5 },
+  'maionese light': { cal: 240, p: 0.5, c: 6, f: 24 },
+  'sugo rosso': { cal: 50, p: 1.5, c: 8, f: 1.5 },
+  'sugo': { cal: 50, p: 1.5, c: 8, f: 1.5 },
+
+  // Snack e barrette
+  'barretta proteica': { cal: 200, p: 20, c: 20, f: 6, servingG: 50 },
 };
 
 // Unit conversions to grams
@@ -276,15 +341,30 @@ export class NutritionService {
     normalized = normalized
       .replace(/^(un |una |uno |dei |delle |dello |della |il |la |lo |i |le |gli )/i, '')
       .replace(/\s*(fresco|fresca|freschi|fresche|biologico|bio|surgelato|surgelata)$/i, '')
+      .replace(/\s*\([^)]*\)/g, '') // remove parenthetical notes like "(pancake)"
       .trim();
 
     // Check exact match first
     if (LOCAL_FOOD_DB[normalized]) return normalized;
 
-    // Try partial matches
+    // Check brand mapping
+    for (const [brand, generic] of Object.entries(BRAND_MAP)) {
+      if (normalized.includes(brand)) {
+        if (LOCAL_FOOD_DB[generic]) return generic;
+      }
+    }
+
+    // Try partial matches with DB
     for (const key of Object.keys(LOCAL_FOOD_DB)) {
       if (normalized.includes(key) || key.includes(normalized)) {
         return key;
+      }
+    }
+
+    // Last resort: check if any brand maps to something we know
+    for (const [brand, generic] of Object.entries(BRAND_MAP)) {
+      if (normalized.includes(brand)) {
+        return generic;
       }
     }
 
@@ -296,13 +376,26 @@ export class NutritionService {
     const servingSizes: Record<string, number> = {
       'biscotti': 10,
       'biscotto': 10,
+      'biscotti proteici': 8,
       'crackers': 7,
+      'crackers integrali': 12,
       'cracker': 7,
       'fette biscottate': 10,
       'gallette': 9,
+      'gallette di riso': 9,
       'mandorle': 1.2,
+      'mandorla': 1.2,
       'noci': 5,
+      'noce': 5,
       'nocciole': 2,
+      'nocciola': 2,
+      'piadina': 80,
+      'yogurt': 125,
+      'scatoletta': 80,
+      'uovo': 50,
+      'banana': 120,
+      'mela': 180,
+      'arancia': 200,
     };
 
     for (const [key, size] of Object.entries(servingSizes)) {

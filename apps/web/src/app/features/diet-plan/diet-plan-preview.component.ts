@@ -65,11 +65,13 @@ import { DietPlanStateService, ParsedDay, ParsedMeal, ParsedFood } from './diet-
                   @for (food of meal.foods || []; track $index; let foodIndex = $index) {
                     @if (isEditing(dayIndex, mealIndex)) {
                       <!-- Edit Mode -->
-                      <div class="flex items-center gap-2 py-1">
+                      <div class="flex items-center gap-2 py-1" (click)="$event.stopPropagation()">
                         <input
                           type="text"
                           [(ngModel)]="food.display"
                           class="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          (click)="$event.stopPropagation()"
+                          (focus)="$event.stopPropagation()"
                           (blur)="parseFood(food)"
                         />
                         <button 
