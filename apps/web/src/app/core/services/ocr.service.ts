@@ -63,21 +63,36 @@ export class OcrService {
     this.lastError.set(null);
 
     try {
+      console.log('Step 1: Starting with file', imageFile.name, imageFile.size);
       this.progress.set(10);
       this.status.set('Lettura immagine...');
       
-      // Read file as base64 (most compatible method for iOS)
-      const base64 = await this.fileToBase64(imageFile);
-      console.log('Image read:', (imageFile.size/1024).toFixed(0), 'KB ->', (base64.length/1024).toFixed(0), 'KB base64');
+      // Read file as base64
+      let base64: string;
+      try {
+        base64 = await this.fileToBase64(imageFile);
+        console.log('Step 2: Base64 ready, length:', base64.length);
+      } catch (readError: any) {
+        console.error('FileReader error:', readError);
+        throw new Error('Impossibile leggere il file: ' + (readError.message || 'errore sconosciuto'));
+      }
       
       this.status.set('Invio all\'AI per analisi...');
       this.progress.set(30);
 
-      // Send as JSON using XMLHttpRequest (Safari compatible)
-      const response = await this.sendJSONWithXHR(this.API_URL, {
-        image: base64,
-        mimeType: imageFile.type || 'image/jpeg'
-      });
+      // Send as JSON
+      console.log('Step 3: Sending to API...');
+      let response: Response;
+      try {
+        response = await this.sendJSONWithXHR(this.API_URL, {
+          image: base64,
+          mimeType: imageFile.type || 'image/jpeg'
+        });
+        console.log('Step 4: Got response', response.status);
+      } catch (sendError: any) {
+        console.error('Send error:', sendError);
+        throw sendError;
+      }
 
       this.progress.set(80);
       this.status.set('Elaborazione risposta...');
@@ -119,6 +134,10 @@ export class OcrService {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Errore sconosciuto';
       console.error('OCR Error:', message, error);
+      // Debug alert for mobile
+      if (typeof window !== 'undefined') {
+        console.log('DEBUG ERROR:', JSON.stringify({message, stack: (error as any)?.stack?.substring(0, 200)}));
+      }
       this.lastError.set(message);
       this.status.set('Errore: ' + message);
       throw error;
