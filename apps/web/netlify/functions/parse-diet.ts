@@ -234,7 +234,7 @@ async function callOpenAI(apiKey: string, image: string, mimeType: string) {
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini', // Faster than gpt-4o
       messages: [{
         role: 'user',
         content: [
