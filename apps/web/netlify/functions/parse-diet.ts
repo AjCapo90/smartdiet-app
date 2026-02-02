@@ -1,4 +1,5 @@
 import type { Context } from '@netlify/functions';
+import sharp from 'sharp';
 
 const STRUCTURE_PROMPT = `Parse diet text to JSON. Format: {"days":[{"day":"Lun","meals":[{"t":"b","f":["40g avena","1 uovo"]}]}]}
 t=b(breakfast),s(snack),l(lunch),d(dinner). Keep food strings short. JSON only.`;
@@ -31,12 +32,22 @@ export default async function handler(req: Request, context: Context) {
         return new Response(JSON.stringify({ error: 'No image in form data' }), { status: 400, headers });
       }
       
-      // Convert file to base64 using Buffer (faster in Node.js)
+      // Resize and compress image for faster OCR
       const arrayBuffer = await file.arrayBuffer();
-      image = Buffer.from(arrayBuffer).toString('base64');
-      mimeType = file.type || 'image/jpeg';
+      const inputBuffer = Buffer.from(arrayBuffer);
       
-      console.log(`FormData file: ${file.name}, ${(file.size/1024).toFixed(0)}KB, ${mimeType}`);
+      console.log(`Input file: ${file.name}, ${(file.size/1024).toFixed(0)}KB`);
+      
+      // Resize to max 1200px and compress to 80% quality
+      const resizedBuffer = await sharp(inputBuffer)
+        .resize(1200, 1200, { fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+      
+      image = resizedBuffer.toString('base64');
+      mimeType = 'image/jpeg';
+      
+      console.log(`Resized: ${(inputBuffer.length/1024).toFixed(0)}KB -> ${(resizedBuffer.length/1024).toFixed(0)}KB`);
     } else {
       // Handle JSON body
       const body = await req.json();
