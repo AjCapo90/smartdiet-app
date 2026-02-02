@@ -86,26 +86,8 @@ export class OcrService {
       this.status.set('Invio all\'AI per analisi...');
       this.progress.set(30);
 
-      // Call the Netlify function with timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s timeout
-
-      let response: Response;
-      try {
-        response = await fetch(this.API_URL, {
-          method: 'POST',
-          body: formData, // FormData auto-sets Content-Type with boundary
-          signal: controller.signal,
-        });
-      } catch (fetchError: any) {
-        clearTimeout(timeoutId);
-        console.error('Fetch error:', fetchError);
-        if (fetchError.name === 'AbortError') {
-          throw new Error('Timeout: l\'analisi sta impiegando troppo tempo.');
-        }
-        throw new Error(`Errore upload: ${fetchError.message || 'Connessione fallita'}`);
-      }
-      clearTimeout(timeoutId);
+      // Use XMLHttpRequest for better Safari iOS compatibility
+      const response = await this.uploadWithXHR(this.API_URL, formData);
 
       this.progress.set(80);
       this.status.set('Elaborazione risposta...');
@@ -165,6 +147,41 @@ export class OcrService {
       };
       reader.onerror = () => reject(new Error('Errore lettura file'));
       reader.readAsDataURL(file);
+    });
+  }
+
+  // XMLHttpRequest upload - more stable on Safari iOS
+  private uploadWithXHR(url: string, formData: FormData): Promise<Response> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', url, true);
+      xhr.timeout = 120000; // 2 minutes
+      
+      xhr.onload = () => {
+        const response = new Response(xhr.responseText, {
+          status: xhr.status,
+          statusText: xhr.statusText,
+          headers: { 'Content-Type': 'application/json' }
+        });
+        resolve(response);
+      };
+      
+      xhr.onerror = () => {
+        reject(new Error('Errore di rete durante l\'upload'));
+      };
+      
+      xhr.ontimeout = () => {
+        reject(new Error('Timeout: l\'upload ha impiegato troppo tempo'));
+      };
+      
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 30);
+          this.progress.set(30 + pct);
+        }
+      };
+      
+      xhr.send(formData);
     });
   }
 
