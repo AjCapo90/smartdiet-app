@@ -162,7 +162,7 @@ export class DietPlanPreviewComponent implements OnInit {
   getMealIcon(type: string): string {
     const icons: Record<string, string> = {
       'breakfast': '🌅', 'b': '🌅',
-      'morning_snack': '🍎', 's': '🍎',
+      'morning_snack': '🍎', 's': '🍎', 'sm': '🍎',
       'lunch': '☀️', 'l': '☀️',
       'afternoon_snack': '🥜', 'sp': '🥜',
       'dinner': '🌙', 'd': '🌙',
@@ -173,7 +173,7 @@ export class DietPlanPreviewComponent implements OnInit {
   getMealLabel(type: string): string {
     const labels: Record<string, string> = {
       'breakfast': 'Colazione', 'b': 'Colazione',
-      'morning_snack': 'Spuntino mattina', 's': 'Spuntino mattina',
+      'morning_snack': 'Spuntino mattina', 's': 'Spuntino mattina', 'sm': 'Spuntino mattina',
       'lunch': 'Pranzo', 'l': 'Pranzo',
       'afternoon_snack': 'Spuntino pomeriggio', 'sp': 'Spuntino pomeriggio',
       'dinner': 'Cena', 'd': 'Cena',

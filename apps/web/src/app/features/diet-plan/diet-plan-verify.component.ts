@@ -2,7 +2,7 @@ import { Component, signal, inject, OnInit, computed } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { NgClass } from '@angular/common';
-import { DietPlanStateService, ParsedFood } from './diet-plan-state.service';
+import { DietPlanStateService, ParsedFood, ParsedDay, ParsedMeal } from './diet-plan-state.service';
 import { NutritionService, NutritionData } from '../../core/services/nutrition.service';
 import { StorageService, DietPlan, DayPlan, PlannedMeal, FoodItem, Macros } from '../../core/services/storage.service';
 
@@ -71,18 +71,47 @@ interface FoodWithContext extends ParsedFood {
             </div>
           </div>
         </div>
+
+        <!-- Weekly Summary -->
+        <div class="card bg-gradient-to-br from-primary-50 to-primary-100 border-primary-200">
+          <h3 class="font-semibold text-primary-900 mb-4">📊 Riepilogo Settimanale</h3>
+          <div class="grid grid-cols-2 gap-4">
+            <div class="text-center p-3 bg-white/70 rounded-xl">
+              <p class="text-2xl font-bold text-primary-700">{{ weeklyTotals().calories }}</p>
+              <p class="text-xs text-gray-600">kcal/settimana</p>
+            </div>
+            <div class="text-center p-3 bg-white/70 rounded-xl">
+              <p class="text-2xl font-bold text-primary-700">{{ Math.round(weeklyTotals().calories / 7) }}</p>
+              <p class="text-xs text-gray-600">kcal/giorno (media)</p>
+            </div>
+            <div class="col-span-2 grid grid-cols-3 gap-2">
+              <div class="text-center p-2 bg-red-50 rounded-lg">
+                <p class="font-semibold text-red-600">{{ weeklyTotals().protein }}g</p>
+                <p class="text-xs text-gray-500">proteine</p>
+              </div>
+              <div class="text-center p-2 bg-blue-50 rounded-lg">
+                <p class="font-semibold text-blue-600">{{ weeklyTotals().carbs }}g</p>
+                <p class="text-xs text-gray-500">carbo</p>
+              </div>
+              <div class="text-center p-2 bg-yellow-50 rounded-lg">
+                <p class="font-semibold text-yellow-600">{{ weeklyTotals().fat }}g</p>
+                <p class="text-xs text-gray-500">grassi</p>
+              </div>
+            </div>
+          </div>
+        </div>
       }
 
-      <!-- Pending Foods -->
+      <!-- Pending Foods (if any) -->
       @if (pendingFoods().length > 0 && !isCalculating()) {
         <div class="space-y-3">
-          <h2 class="font-semibold text-gray-700">Alimenti da completare:</h2>
+          <h2 class="font-semibold text-gray-700">⚠️ Alimenti da completare:</h2>
           
           @for (food of pendingFoods(); track food.dayIndex + '-' + food.mealIndex + '-' + food.foodIndex) {
-            <div class="card">
+            <div class="card border-amber-200">
               <div 
                 class="flex items-center justify-between cursor-pointer"
-                (click)="toggleExpand(food)"
+                (click)="togglePendingExpand(food)"
               >
                 <div>
                   <p class="font-medium text-gray-900">{{ food.display || food.name }}</p>
@@ -152,74 +181,83 @@ interface FoodWithContext extends ParsedFood {
         </div>
       }
 
-      <!-- Resolved Foods Summary -->
-      @if (!isCalculating() && counts().resolved > 0) {
-        <div class="space-y-3">
-          <h2 class="font-semibold text-gray-700 flex items-center justify-between">
-            <span>Alimenti calcolati ({{ counts().resolved }})</span>
-            <button 
-              (click)="showResolved.set(!showResolved())"
-              class="text-sm text-primary-600 font-normal"
-            >
-              {{ showResolved() ? 'Nascondi' : 'Mostra' }}
-            </button>
-          </h2>
+      <!-- Daily Details -->
+      @if (!isCalculating()) {
+        <div class="space-y-4">
+          <h2 class="font-semibold text-gray-700">📅 Dettaglio Giornaliero</h2>
 
-          @if (showResolved()) {
-            @for (day of state.parsedData()?.days || []; track day.day; let dayIndex = $index) {
-              @for (meal of day.meals; track $index; let mealIndex = $index) {
-                @for (food of meal.foods; track $index) {
-                  @if (food.macros && !food.needsManualInput) {
-                    <div class="p-3 bg-gray-50 rounded-xl">
-                      <div class="flex items-center justify-between">
-                        <div>
-                          <p class="text-sm font-medium text-gray-700">{{ food.display || food.name }}</p>
-                          <p class="text-xs text-gray-400">{{ day.day }} · {{ getMealLabelByType(meal.type) }}</p>
+          @for (day of state.parsedData()?.days || []; track day.day; let dayIndex = $index) {
+            <div class="card">
+              <!-- Day Header -->
+              <div 
+                class="flex items-center justify-between cursor-pointer"
+                (click)="toggleDayExpand(dayIndex)"
+              >
+                <div>
+                  <h3 class="font-semibold text-lg text-gray-900">{{ day.day }}</h3>
+                  <p class="text-sm text-gray-500">{{ day.meals.length }} pasti</p>
+                </div>
+                <div class="text-right">
+                  <p class="text-xl font-bold text-primary-600">{{ getDayCalories(dayIndex) }} kcal</p>
+                  <p class="text-xs text-gray-500">
+                    P:{{ getDayMacro(dayIndex, 'protein') }}g · 
+                    C:{{ getDayMacro(dayIndex, 'carbs') }}g · 
+                    G:{{ getDayMacro(dayIndex, 'fat') }}g
+                  </p>
+                </div>
+              </div>
+
+              <!-- Expanded Day Content -->
+              @if (expandedDays().has(dayIndex)) {
+                <div class="mt-4 pt-4 border-t border-gray-200 space-y-3">
+                  @for (meal of day.meals; track $index; let mealIndex = $index) {
+                    <div class="bg-gray-50 rounded-xl p-3">
+                      <!-- Meal Header -->
+                      <div 
+                        class="flex items-center justify-between cursor-pointer"
+                        (click)="toggleMealExpand(dayIndex, mealIndex); $event.stopPropagation()"
+                      >
+                        <div class="flex items-center gap-2">
+                          <span class="text-lg">{{ getMealIcon(meal.type) }}</span>
+                          <span class="font-medium text-gray-800">{{ getMealLabelByType(meal.type) }}</span>
                         </div>
                         <div class="text-right">
-                          <p class="text-sm font-semibold text-gray-900">{{ food.macros.calories }} kcal</p>
-                          <p class="text-xs text-gray-500">
-                            P:{{ food.macros.protein }}g · C:{{ food.macros.carbs }}g · G:{{ food.macros.fat }}g
-                          </p>
+                          <span class="font-semibold text-gray-900">{{ getMealCalories(dayIndex, mealIndex) }} kcal</span>
+                          <span class="text-gray-400 ml-2">{{ isMealExpanded(dayIndex, mealIndex) ? '▲' : '▼' }}</span>
                         </div>
                       </div>
+
+                      <!-- Expanded Meal Foods -->
+                      @if (isMealExpanded(dayIndex, mealIndex)) {
+                        <div class="mt-3 pt-3 border-t border-gray-200 space-y-2">
+                          @for (food of meal.foods; track $index) {
+                            <div class="flex items-center justify-between text-sm">
+                              <span class="text-gray-700">{{ food.display || food.name }}</span>
+                              <div class="text-right">
+                                <span class="font-medium text-gray-900">{{ food.macros?.calories || 0 }} kcal</span>
+                                <span class="text-xs text-gray-400 ml-2">
+                                  P:{{ food.macros?.protein || 0 }}g
+                                </span>
+                              </div>
+                            </div>
+                          }
+                          <!-- Meal Macro Summary -->
+                          <div class="pt-2 mt-2 border-t border-gray-300 flex justify-between text-xs text-gray-500">
+                            <span>Totale pasto:</span>
+                            <span>
+                              P:{{ getMealMacro(dayIndex, mealIndex, 'protein') }}g · 
+                              C:{{ getMealMacro(dayIndex, mealIndex, 'carbs') }}g · 
+                              G:{{ getMealMacro(dayIndex, mealIndex, 'fat') }}g
+                            </span>
+                          </div>
+                        </div>
+                      }
                     </div>
                   }
-                }
+                </div>
               }
-            }
+            </div>
           }
-        </div>
-      }
-
-      <!-- Totals Preview -->
-      @if (!isCalculating() && pendingFoods().length === 0) {
-        <div class="card bg-gradient-to-br from-primary-50 to-primary-100 border-primary-200">
-          <h3 class="font-semibold text-primary-900 mb-4">📊 Riepilogo Settimanale</h3>
-          <div class="grid grid-cols-2 gap-4">
-            <div class="text-center p-3 bg-white/50 rounded-xl">
-              <p class="text-2xl font-bold text-primary-700">{{ weeklyTotals().calories }}</p>
-              <p class="text-xs text-gray-600">kcal/settimana</p>
-            </div>
-            <div class="text-center p-3 bg-white/50 rounded-xl">
-              <p class="text-2xl font-bold text-primary-700">{{ Math.round(weeklyTotals().calories / 7) }}</p>
-              <p class="text-xs text-gray-600">kcal/giorno (media)</p>
-            </div>
-            <div class="col-span-2 grid grid-cols-3 gap-2">
-              <div class="text-center p-2 bg-red-50 rounded-lg">
-                <p class="font-semibold text-red-600">{{ weeklyTotals().protein }}g</p>
-                <p class="text-xs text-gray-500">proteine</p>
-              </div>
-              <div class="text-center p-2 bg-blue-50 rounded-lg">
-                <p class="font-semibold text-blue-600">{{ weeklyTotals().carbs }}g</p>
-                <p class="text-xs text-gray-500">carbo</p>
-              </div>
-              <div class="text-center p-2 bg-yellow-50 rounded-lg">
-                <p class="font-semibold text-yellow-600">{{ weeklyTotals().fat }}g</p>
-                <p class="text-xs text-gray-500">grassi</p>
-              </div>
-            </div>
-          </div>
         </div>
       }
 
@@ -253,10 +291,11 @@ export class DietPlanVerifyComponent implements OnInit {
   private router = inject(Router);
 
   isCalculating = signal(true);
-  showResolved = signal(false);
   manualInput = signal<Record<string, { calories: number; protein: number; carbs: number; fat: number }>>({});
   
   pendingFoods = signal<FoodWithContext[]>([]);
+  expandedDays = signal<Set<number>>(new Set([0])); // First day expanded by default
+  expandedMeals = signal<Set<string>>(new Set());
   
   protected Math = Math;
 
@@ -298,6 +337,91 @@ export class DietPlanVerifyComponent implements OnInit {
       carbs: Math.round(totals.carbs * 10) / 10,
       fat: Math.round(totals.fat * 10) / 10,
     };
+  }
+
+  getDayCalories(dayIndex: number): number {
+    const day = this.state.parsedData()?.days[dayIndex];
+    if (!day) return 0;
+    
+    return Math.round(day.meals.reduce((sum, meal) => 
+      sum + meal.foods.reduce((msum, food) => msum + (food.macros?.calories || 0), 0), 0
+    ));
+  }
+
+  getDayMacro(dayIndex: number, macro: 'protein' | 'carbs' | 'fat'): number {
+    const day = this.state.parsedData()?.days[dayIndex];
+    if (!day) return 0;
+    
+    const total = day.meals.reduce((sum, meal) => 
+      sum + meal.foods.reduce((msum, food) => msum + (food.macros?.[macro] || 0), 0), 0
+    );
+    return Math.round(total * 10) / 10;
+  }
+
+  getMealCalories(dayIndex: number, mealIndex: number): number {
+    const meal = this.state.parsedData()?.days[dayIndex]?.meals[mealIndex];
+    if (!meal) return 0;
+    
+    return Math.round(meal.foods.reduce((sum, food) => sum + (food.macros?.calories || 0), 0));
+  }
+
+  getMealMacro(dayIndex: number, mealIndex: number, macro: 'protein' | 'carbs' | 'fat'): number {
+    const meal = this.state.parsedData()?.days[dayIndex]?.meals[mealIndex];
+    if (!meal) return 0;
+    
+    const total = meal.foods.reduce((sum, food) => sum + (food.macros?.[macro] || 0), 0);
+    return Math.round(total * 10) / 10;
+  }
+
+  toggleDayExpand(dayIndex: number): void {
+    this.expandedDays.update(set => {
+      const newSet = new Set(set);
+      if (newSet.has(dayIndex)) {
+        newSet.delete(dayIndex);
+      } else {
+        newSet.add(dayIndex);
+      }
+      return newSet;
+    });
+  }
+
+  toggleMealExpand(dayIndex: number, mealIndex: number): void {
+    const key = `${dayIndex}-${mealIndex}`;
+    this.expandedMeals.update(set => {
+      const newSet = new Set(set);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
+    });
+  }
+
+  isMealExpanded(dayIndex: number, mealIndex: number): boolean {
+    return this.expandedMeals().has(`${dayIndex}-${mealIndex}`);
+  }
+
+  getMealIcon(type: string): string {
+    const icons: Record<string, string> = {
+      'breakfast': '🌅',
+      'morning_snack': '🍎',
+      'lunch': '☀️',
+      'afternoon_snack': '🥜',
+      'dinner': '🌙',
+    };
+    return icons[type] || '🍽️';
+  }
+
+  getMealLabelByType(type: string): string {
+    const labels: Record<string, string> = {
+      'breakfast': 'Colazione',
+      'morning_snack': 'Spuntino mattina',
+      'lunch': 'Pranzo',
+      'afternoon_snack': 'Spuntino pomeriggio',
+      'dinner': 'Cena',
+    };
+    return labels[type] || type;
   }
 
   async calculateNutrition(): Promise<void> {
@@ -380,18 +504,7 @@ export class DietPlanVerifyComponent implements OnInit {
     return this.getMealLabelByType(meal?.type || '');
   }
 
-  getMealLabelByType(type: string): string {
-    const labels: Record<string, string> = {
-      'breakfast': 'Colazione',
-      'morning_snack': 'Spuntino mattina',
-      'lunch': 'Pranzo',
-      'afternoon_snack': 'Spuntino pomeriggio',
-      'dinner': 'Cena',
-    };
-    return labels[type] || type;
-  }
-
-  toggleExpand(food: FoodWithContext): void {
+  togglePendingExpand(food: FoodWithContext): void {
     this.pendingFoods.update(foods => 
       foods.map(f => 
         f === food ? { ...f, isExpanded: !f.isExpanded } : f
@@ -462,17 +575,6 @@ export class DietPlanVerifyComponent implements OnInit {
       return map[italian] || italian;
     };
 
-    const getMealTypeLabel = (type: string): string => {
-      const labels: Record<string, string> = {
-        'breakfast': 'Colazione',
-        'morning_snack': 'Spuntino mattina',
-        'lunch': 'Pranzo',
-        'afternoon_snack': 'Spuntino pomeriggio',
-        'dinner': 'Cena',
-      };
-      return labels[type] || type;
-    };
-
     const weeklyTotals = this.weeklyTotals();
 
     return {
@@ -497,7 +599,7 @@ export class DietPlanVerifyComponent implements OnInit {
 
           return {
             id: crypto.randomUUID(),
-            name: getMealTypeLabel(meal.type),
+            name: this.getMealLabelByType(meal.type),
             type: meal.type as PlannedMeal['type'],
             displayType: mapDisplayType(meal.type),
             time: meal.time,

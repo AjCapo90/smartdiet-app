@@ -101,15 +101,31 @@ export class DietPlanStateService {
       'Monday': 'Lunedì', 'Tuesday': 'Martedì', 'Wednesday': 'Mercoledì',
       'Thursday': 'Giovedì', 'Friday': 'Venerdì', 'Saturday': 'Sabato', 'Sunday': 'Domenica',
     };
-    
-    const typeMap: Record<string, string> = {
-      'b': 'breakfast', 's': 'morning_snack', 'l': 'lunch', 
-      'sp': 'afternoon_snack', 'd': 'dinner'
+
+    // Order for sorting days
+    const dayOrder: Record<string, number> = {
+      'Lunedì': 0, 'Martedì': 1, 'Mercoledì': 2, 'Giovedì': 3,
+      'Venerdì': 4, 'Sabato': 5, 'Domenica': 6
     };
 
-    const days: ParsedDay[] = (data.days || []).map((day: any) => ({
-      day: dayMap[day.day] || day.day,
-      meals: (day.meals || []).map((meal: any) => {
+    // Order for sorting meals
+    const mealOrder: Record<string, number> = {
+      'breakfast': 0, 'morning_snack': 1, 'lunch': 2, 
+      'afternoon_snack': 3, 'dinner': 4
+    };
+    
+    const typeMap: Record<string, string> = {
+      'b': 'breakfast', 
+      's': 'morning_snack', 
+      'sm': 'morning_snack',
+      'l': 'lunch', 
+      'sp': 'afternoon_snack',
+      'd': 'dinner'
+    };
+
+    const days: ParsedDay[] = (data.days || []).map((day: any) => {
+      const dayName = dayMap[day.day] || day.day;
+      const meals = (day.meals || []).map((meal: any) => {
         const mealType = typeMap[meal.t] || meal.type || meal.t;
         const foods: ParsedFood[] = (meal.f || meal.foods || []).map((food: any) => {
           if (typeof food === 'string') {
@@ -138,8 +154,16 @@ export class DietPlanStateService {
           time: meal.time,
           foods,
         };
-      })
-    }));
+      });
+
+      // Sort meals by type (breakfast → morning_snack → lunch → afternoon_snack → dinner)
+      meals.sort((a: any, b: any) => (mealOrder[a.type] ?? 99) - (mealOrder[b.type] ?? 99));
+
+      return { day: dayName, meals };
+    });
+
+    // Sort days (Lunedì → Domenica)
+    days.sort((a, b) => (dayOrder[a.day] ?? 99) - (dayOrder[b.day] ?? 99));
 
     return {
       days,

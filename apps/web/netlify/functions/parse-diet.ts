@@ -1,7 +1,33 @@
 import type { Context } from '@netlify/functions';
 
-const STRUCTURE_PROMPT = `Parse diet text to JSON. Format: {"days":[{"day":"Lun","meals":[{"t":"b","f":["40g avena","1 uovo"]}]}]}
-t=b(breakfast),s(snack),l(lunch),d(dinner). Keep food strings short. JSON only.`;
+const STRUCTURE_PROMPT = `Sei un parser di piani alimentari italiani. Estrai TUTTI i pasti da TUTTI i 7 giorni.
+
+IMPORTANTE: Un piano tipico ha 5 pasti al giorno:
+- COLAZIONE (b)
+- SPUNTINO MATTINA (sm) 
+- PRANZO (l)
+- SPUNTINO POMERIGGIO (sp)
+- CENA (d)
+
+Output JSON ESATTO:
+{"days":[
+  {"day":"Lun","meals":[
+    {"t":"b","f":["40g avena","1 uovo"]},
+    {"t":"sm","f":["30g frutta secca"]},
+    {"t":"l","f":["60g pasta","100g pollo","verdure"]},
+    {"t":"sp","f":["1 yogurt"]},
+    {"t":"d","f":["150g pesce","verdure"]}
+  ]},
+  ...altri 6 giorni...
+]}
+
+REGOLE:
+- Estrai TUTTI i 7 giorni: Lun, Mar, Mer, Gio, Ven, Sab, Dom
+- Estrai TUTTI i pasti di ogni giorno (tipicamente 5)
+- t=b(colazione), sm(spuntino mattina), l(pranzo), sp(spuntino pomeriggio), d(cena)
+- Mantieni quantità e cibi come nell'originale (es: "40g avena", "1 uovo", "100g pollo")
+- Se un giorno ha "FREE" o è vuoto, metti f:[]
+- JSON VALIDO, niente commenti`;
 
 export default async function handler(req: Request, context: Context) {
   const headers = {
@@ -194,8 +220,8 @@ async function openaiVisionOCR(apiKey: string, imageBase64: string, mimeType: st
 }
 
 async function structureWithGPT(apiKey: string, ocrText: string): Promise<any> {
-  // Truncate OCR text if too long
-  const truncatedText = ocrText.length > 3000 ? ocrText.substring(0, 3000) : ocrText;
+  // Allow more text for complex diet plans
+  const truncatedText = ocrText.length > 6000 ? ocrText.substring(0, 6000) : ocrText;
   
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -207,9 +233,9 @@ async function structureWithGPT(apiKey: string, ocrText: string): Promise<any> {
       model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: STRUCTURE_PROMPT },
-        { role: 'user', content: truncatedText }
+        { role: 'user', content: `Ecco il testo OCR del piano alimentare. Estrai TUTTI i pasti di TUTTI i 7 giorni:\n\n${truncatedText}` }
       ],
-      max_tokens: 2000,
+      max_tokens: 4000,
       temperature: 0
     })
   });
