@@ -1,11 +1,7 @@
 import type { Context } from '@netlify/functions';
 
-const STRUCTURE_PROMPT = `Sei un parser di diete. Ti passo il testo OCR di una dieta settimanale italiana (tabella).
-Struttura i dati in JSON:
-{"days":[{"day":"Lunedì","meals":[{"type":"breakfast","time":"8:30","foods":[{"name":"farina avena","qty":40,"unit":"g"}]}]}]}
-
-Tipi pasto: breakfast, morning_snack, lunch, afternoon_snack, dinner.
-Estrai OGNI alimento con quantità e unità. "ev."=opzionale. Solo JSON, niente altro.`;
+const STRUCTURE_PROMPT = `Parse diet text to JSON. Format: {"days":[{"day":"Lun","meals":[{"t":"b","f":["40g avena","1 uovo"]}]}]}
+t=b(breakfast),s(snack),l(lunch),d(dinner). Keep food strings short. JSON only.`;
 
 export default async function handler(req: Request, context: Context) {
   const headers = {
@@ -170,6 +166,9 @@ async function openaiVisionOCR(apiKey: string, imageBase64: string, mimeType: st
 }
 
 async function structureWithGPT(apiKey: string, ocrText: string): Promise<any> {
+  // Truncate OCR text if too long
+  const truncatedText = ocrText.length > 3000 ? ocrText.substring(0, 3000) : ocrText;
+  
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -180,9 +179,9 @@ async function structureWithGPT(apiKey: string, ocrText: string): Promise<any> {
       model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: STRUCTURE_PROMPT },
-        { role: 'user', content: ocrText }
+        { role: 'user', content: truncatedText }
       ],
-      max_tokens: 4000,
+      max_tokens: 2000,
       temperature: 0
     })
   });
