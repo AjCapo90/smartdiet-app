@@ -62,10 +62,12 @@ export class OcrService {
     this.status.set('Preparazione immagine...');
     this.lastError.set(null);
 
+    // Start smooth progress animation
+    const progressInterval = this.startSmoothProgress();
+
     try {
       console.log('Step 1: Starting with file', imageFile.name, imageFile.size);
-      this.progress.set(10);
-      this.status.set('Lettura immagine...');
+      this.updateProgress(5, 15, 'Lettura immagine...');
       
       // Read file as base64
       let base64: string;
@@ -77,8 +79,7 @@ export class OcrService {
         throw new Error('Impossibile leggere il file: ' + (readError.message || 'errore sconosciuto'));
       }
       
-      this.status.set('Invio all\'AI per analisi...');
-      this.progress.set(30);
+      this.updateProgress(15, 35, 'Invio immagine al server...');
 
       // Send as JSON
       console.log('Step 3: Sending to API...');
@@ -94,8 +95,7 @@ export class OcrService {
         throw sendError;
       }
 
-      this.progress.set(80);
-      this.status.set('Elaborazione risposta...');
+      this.updateProgress(85, 95, 'Elaborazione risposta...');
 
       const responseText = await response.text();
       console.log('API Response:', response.status, responseText.substring(0, 500));
@@ -122,6 +122,7 @@ export class OcrService {
         throw new Error(result.error || result.details || 'Risposta non valida dal server');
       }
 
+      this.stopSmoothProgress(progressInterval);
       this.progress.set(100);
       this.status.set('Completato!');
 
@@ -132,6 +133,7 @@ export class OcrService {
       return normalized as ParsedDietPlan;
 
     } catch (error) {
+      this.stopSmoothProgress(progressInterval);
       const message = error instanceof Error ? error.message : 'Errore sconosciuto';
       console.error('OCR Error:', message, error);
       // Debug alert for mobile
@@ -143,6 +145,36 @@ export class OcrService {
       throw error;
     } finally {
       this.isProcessing.set(false);
+    }
+  }
+
+  // Smooth progress animation
+  private progressTarget = 0;
+  private progressIntervalId: any = null;
+
+  private startSmoothProgress(): any {
+    this.progressTarget = 0;
+    return setInterval(() => {
+      const current = this.progress();
+      if (current < this.progressTarget) {
+        // Ease towards target
+        const diff = this.progressTarget - current;
+        const step = Math.max(0.5, diff * 0.1);
+        this.progress.set(Math.min(current + step, this.progressTarget));
+      }
+    }, 100);
+  }
+
+  private stopSmoothProgress(intervalId: any): void {
+    if (intervalId) clearInterval(intervalId);
+  }
+
+  private updateProgress(min: number, max: number, status: string): void {
+    this.status.set(status);
+    this.progressTarget = max;
+    // Ensure we're at least at min
+    if (this.progress() < min) {
+      this.progress.set(min);
     }
   }
 
@@ -187,8 +219,26 @@ export class OcrService {
       
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
-          const pct = Math.round((e.loaded / e.total) * 30);
-          this.progress.set(30 + pct);
+          // Upload is 15-35%, then server processing goes to 85%
+          const uploadPct = (e.loaded / e.total);
+          const progress = 15 + (uploadPct * 20); // 15% to 35%
+          this.progressTarget = progress;
+          
+          if (uploadPct >= 1) {
+            // Upload done, server is processing
+            this.status.set('Estrazione testo con AI...');
+            this.progressTarget = 55;
+            
+            // Simulate server processing progress
+            setTimeout(() => {
+              this.status.set('Strutturazione dati...');
+              this.progressTarget = 75;
+            }, 3000);
+            
+            setTimeout(() => {
+              this.progressTarget = 85;
+            }, 8000);
+          }
         }
       };
       

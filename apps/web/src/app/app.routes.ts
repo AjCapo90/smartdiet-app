@@ -27,6 +27,14 @@ export const appRoutes: Routes = [
         loadComponent: () => import('./features/diet-plan/diet-plan.component').then(m => m.DietPlanComponent)
       },
       {
+        path: 'diet-plan/preview',
+        loadComponent: () => import('./features/diet-plan/diet-plan-preview.component').then(m => m.DietPlanPreviewComponent)
+      },
+      {
+        path: 'diet-plan/verify',
+        loadComponent: () => import('./features/diet-plan/diet-plan-verify.component').then(m => m.DietPlanVerifyComponent)
+      },
+      {
         path: 'diet-plan/new',
         loadComponent: () => import('./features/diet-plan/diet-plan-form.component').then(m => m.DietPlanFormComponent)
       }

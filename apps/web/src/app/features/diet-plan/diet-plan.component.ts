@@ -1,8 +1,9 @@
 import { Component, signal, inject, computed } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { NgClass } from '@angular/common';
 import { OcrService, ParsedDietPlan, ParsedMeal } from '../../core/services/ocr.service';
 import { StorageService, DietPlan, DayPlan, PlannedMeal, FoodItem } from '../../core/services/storage.service';
+import { DietPlanStateService } from './diet-plan-state.service';
 
 @Component({
   selector: 'app-diet-plan',
@@ -204,6 +205,8 @@ import { StorageService, DietPlan, DayPlan, PlannedMeal, FoodItem } from '../../
 export class DietPlanComponent {
   protected ocr = inject(OcrService);
   private storage = inject(StorageService);
+  private stateService = inject(DietPlanStateService);
+  private router = inject(Router);
 
   activePlan = this.storage.dietPlan;
   errorMessage = signal<string | null>(null);
@@ -274,16 +277,14 @@ export class DietPlanComponent {
       // Parse using AI Vision
       const parsed = await this.ocr.parseDietPlanFromImage(file);
 
-      // Convert to DietPlan format
-      const dietPlan = this.convertToDietPlan(parsed);
-
       // Validate
-      if (dietPlan.days.length === 0) {
+      if (!parsed.days || parsed.days.length === 0) {
         throw new Error('Non sono riuscito a estrarre pasti dalla foto. Prova con una foto più nitida.');
       }
 
-      // Save to storage
-      this.storage.saveDietPlan(dietPlan);
+      // Store in state service and navigate to preview
+      this.stateService.setParsedData(parsed);
+      this.router.navigate(['/diet-plan/preview']);
 
     } catch (error) {
       console.error('OCR Error:', error);
