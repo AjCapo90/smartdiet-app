@@ -64,22 +64,13 @@ export class OcrService {
 
     try {
       this.progress.set(10);
-      this.status.set('Compressione immagine...');
-      
-      // Compress image before upload using createImageBitmap (iOS compatible)
-      let fileToUpload = imageFile;
-      try {
-        fileToUpload = await this.compressForUpload(imageFile);
-        console.log(`Compressed: ${(imageFile.size/1024).toFixed(0)}KB -> ${(fileToUpload.size/1024).toFixed(0)}KB`);
-      } catch (e) {
-        console.warn('Compression failed, using original:', e);
-      }
-      
       this.status.set('Preparazione upload...');
       
-      // Use FormData - native file upload
+      // Skip compression - send original file directly
       const formData = new FormData();
-      formData.append('image', fileToUpload);
+      formData.append('image', imageFile);
+      
+      console.log('Uploading original file:', imageFile.name, (imageFile.size/1024).toFixed(0), 'KB');
       
       console.log('Uploading file:', imageFile.name, (imageFile.size / 1024).toFixed(0), 'KB');
       
