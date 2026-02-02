@@ -1,5 +1,4 @@
 import type { Context } from '@netlify/functions';
-const Jimp = require('jimp');
 
 const STRUCTURE_PROMPT = `Parse diet text to JSON. Format: {"days":[{"day":"Lun","meals":[{"t":"b","f":["40g avena","1 uovo"]}]}]}
 t=b(breakfast),s(snack),l(lunch),d(dinner). Keep food strings short. JSON only.`;
@@ -32,26 +31,12 @@ export default async function handler(req: Request, context: Context) {
         return new Response(JSON.stringify({ error: 'No image in form data' }), { status: 400, headers });
       }
       
-      // Resize and compress image for faster OCR
+      // Convert to base64 directly (no resize - let Google Vision handle it)
       const arrayBuffer = await file.arrayBuffer();
-      const inputBuffer = Buffer.from(arrayBuffer);
+      image = Buffer.from(arrayBuffer).toString('base64');
+      mimeType = file.type || 'image/jpeg';
       
-      console.log(`Input file: ${file.name}, ${(file.size/1024).toFixed(0)}KB`);
-      
-      // Resize to max 1200px using Jimp (pure JS, serverless compatible)
-      const jimpImage = await Jimp.read(inputBuffer);
-      const { width, height } = jimpImage.bitmap;
-      
-      if (width > 1200 || height > 1200) {
-        jimpImage.scaleToFit(1200, 1200);
-      }
-      jimpImage.quality(80);
-      
-      const resizedBuffer = await jimpImage.getBufferAsync(Jimp.MIME_JPEG);
-      image = resizedBuffer.toString('base64');
-      mimeType = 'image/jpeg';
-      
-      console.log(`Resized: ${(inputBuffer.length/1024).toFixed(0)}KB -> ${(resizedBuffer.length/1024).toFixed(0)}KB`);
+      console.log(`File: ${file.name}, ${(file.size/1024).toFixed(0)}KB, type: ${mimeType}`);
     } else {
       // Handle JSON body
       const body = await req.json();
