@@ -1,10 +1,10 @@
 import type { Context } from '@netlify/functions';
 
-// Prompt conciso ma completo
-const PROMPT = `Estrai TUTTI gli alimenti dalla dieta in foto.
-JSON: {"days":[{"day":"Lunedì","meals":[{"type":"breakfast","foods":[{"name":"farina avena","qty":40,"unit":"g"}]}]}]}
-Tipi pasto: breakfast (colazione), morning_snack (spuntino mattina), lunch (pranzo), afternoon_snack (spuntino pomeriggio), dinner (cena).
-Estrai nome esatto, quantità e unità di OGNI alimento. Solo JSON.`;
+// Prompt ultra-minimale per risposta rapida
+const PROMPT = `Leggi la dieta dalla foto. Output JSON compatto:
+{"d":[{"g":"Lun","m":[{"t":"b","f":["40g farina avena","1 uovo"]}]}]}
+g=giorno(Lun/Mar/Mer/Gio/Ven/Sab/Dom), t=tipo(b=colazione,sm=spuntino mattina,l=pranzo,sp=spuntino pomeriggio,c=cena), f=lista cibi con quantità.
+Estrai TUTTI i giorni e TUTTI i pasti. Solo JSON.`;
 
 export default async function handler(req: Request, context: Context) {
   const headers = {
@@ -213,7 +213,7 @@ async function callOpenAI(apiKey: string, image: string, mimeType: string) {
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-4o', // More capable with vision
+      model: 'gpt-4o-mini', // Faster for simple extraction
       messages: [{
         role: 'user',
         content: [
