@@ -63,46 +63,85 @@ export class OcrService {
     this.lastError.set(null);
 
     try {
+      // Check file size (max 10MB)
+      const maxSize = 10 * 1024 * 1024;
+      if (imageFile.size > maxSize) {
+        throw new Error(`Immagine troppo grande (${(imageFile.size / 1024 / 1024).toFixed(1)}MB). Max 10MB.`);
+      }
+
       // Convert file to base64
       this.progress.set(10);
+      this.status.set(`Preparazione immagine (${(imageFile.size / 1024).toFixed(0)}KB)...`);
       const base64 = await this.fileToBase64(imageFile);
       
       this.status.set('Invio all\'AI per analisi...');
       this.progress.set(30);
 
-      // Call the Netlify function
-      const response = await fetch(this.API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          image: base64,
-          mimeType: imageFile.type || 'image/jpeg',
-        }),
-      });
+      console.log('Sending to API:', this.API_URL, 'Image size:', base64.length, 'bytes');
+
+      // Call the Netlify function with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 min timeout
+
+      let response: Response;
+      try {
+        response = await fetch(this.API_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            image: base64,
+            mimeType: imageFile.type || 'image/jpeg',
+          }),
+          signal: controller.signal,
+        });
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          throw new Error('Timeout: l\'analisi sta impiegando troppo tempo. Riprova con un\'immagine più piccola.');
+        }
+        throw new Error(`Errore di rete: ${fetchError.message}`);
+      }
+      clearTimeout(timeoutId);
 
       this.progress.set(80);
       this.status.set('Elaborazione risposta...');
 
+      const responseText = await response.text();
+      console.log('API Response:', response.status, responseText.substring(0, 500));
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP error ${response.status}`);
+        let errorMessage = `HTTP ${response.status}`;
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData.details || errorData.error || errorMessage;
+        } catch {
+          errorMessage = responseText || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
 
-      const result = await response.json();
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch {
+        throw new Error('Risposta non valida dal server: ' + responseText.substring(0, 100));
+      }
 
       if (!result.success || !result.data) {
-        throw new Error(result.error || 'Risposta non valida dal server');
+        throw new Error(result.error || result.details || 'Risposta non valida dal server');
       }
 
       this.progress.set(100);
       this.status.set('Completato!');
 
+      console.log('Parse successful, provider:', result.provider);
       return result.data as ParsedDietPlan;
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Errore sconosciuto';
+      console.error('OCR Error:', message, error);
       this.lastError.set(message);
       this.status.set('Errore: ' + message);
       throw error;
