@@ -1,55 +1,31 @@
 import type { Context } from '@netlify/functions';
 
-const SYSTEM_PROMPT = `Sei un esperto nutrizionista che analizza piani alimentari.
-Quando ricevi un'immagine di una dieta settimanale, estrai TUTTI i dati in formato JSON strutturato.
+// Prompt più conciso per risposte più veloci
+const PROMPT = `Analizza questa dieta settimanale italiana. Estrai i dati in JSON:
 
-La dieta è tipicamente una tabella con:
-- Colonne: giorni della settimana (Lunedì, Martedì, etc.)
-- Righe: pasti (Colazione, Spuntino mattina, Pranzo, Spuntino pomeriggio, Cena)
-
-Per ogni alimento, stima i macronutrienti basandoti su valori nutrizionali standard italiani.
-
-IMPORTANTE:
-- Estrai TUTTI gli alimenti con le quantità esatte scritte
-- Se c'è scritto "ev." significa "eventualmente" (opzionale)
-- "q.b." significa "quanto basta"
-- Converti le quantità in grammi quando possibile
-- Stima i macro in modo realistico
-
-Rispondi SOLO con JSON valido, senza markdown o altro testo.`;
-
-const JSON_SCHEMA = `{
-  "planName": "string (nome del piano se presente)",
-  "date": "string (data se presente)", 
-  "notes": ["array di note a piè di pagina"],
+{
+  "planName": "nome piano",
   "days": [
     {
-      "day": "Lunedì|Martedì|Mercoledì|Giovedì|Venerdì|Sabato|Domenica",
+      "day": "Lunedì",
       "meals": [
         {
           "type": "breakfast|morning_snack|lunch|afternoon_snack|dinner",
-          "time": "orario se specificato (es. 8:30)",
-          "foods": [
-            {
-              "name": "nome alimento",
-              "quantity": 100,
-              "unit": "g|ml|pz|scatola|fetta|cucchiaio",
-              "isOptional": false,
-              "macros": {
-                "calories": 100,
-                "protein": 10,
-                "carbs": 20,
-                "fat": 5
-              }
-            }
-          ],
-          "totalMacros": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0 }
+          "time": "8:30",
+          "foods": [{"name": "alimento", "quantity": 100, "unit": "g", "macros": {"calories": 100, "protein": 10, "carbs": 20, "fat": 5}}],
+          "totalMacros": {"calories": 0, "protein": 0, "carbs": 0, "fat": 0}
         }
       ]
     }
   ],
-  "weeklyTotals": { "calories": 0, "protein": 0, "carbs": 0, "fat": 0 }
-}`;
+  "weeklyTotals": {"calories": 0, "protein": 0, "carbs": 0, "fat": 0},
+  "notes": []
+}
+
+Regole:
+- "ev." = opzionale (isOptional: true)
+- Stima macro realistici per ogni alimento
+- Rispondi SOLO con JSON valido`;
 
 export default async function handler(req: Request, context: Context) {
   const headers = {
@@ -65,8 +41,7 @@ export default async function handler(req: Request, context: Context) {
 
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers,
+      status: 405, headers,
     });
   }
 
@@ -76,121 +51,109 @@ export default async function handler(req: Request, context: Context) {
 
     if (!image) {
       return new Response(JSON.stringify({ error: 'No image provided' }), {
-        status: 400,
-        headers,
+        status: 400, headers,
       });
     }
 
-    // Try OpenAI first (fastest), then Anthropic, then xAI/Grok
     const openaiKey = process.env.OPENAI_API_KEY;
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
     const xaiKey = process.env.XAI_API_KEY;
 
     let result;
+    const startTime = Date.now();
 
     if (openaiKey) {
+      console.log('Using OpenAI GPT-4o');
       result = await callOpenAI(openaiKey, image, mimeType);
-    } else if (anthropicKey) {
-      result = await callAnthropic(anthropicKey, image, mimeType);
     } else if (xaiKey) {
+      console.log('Using xAI Grok');
       result = await callXAI(xaiKey, image, mimeType);
+    } else if (anthropicKey) {
+      console.log('Using Anthropic Claude');
+      result = await callAnthropic(anthropicKey, image, mimeType);
     } else {
       return new Response(JSON.stringify({ 
         error: 'No API key configured',
-        details: 'Set XAI_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY in environment'
-      }), {
-        status: 500,
-        headers,
-      });
+        details: 'Set OPENAI_API_KEY, XAI_API_KEY, or ANTHROPIC_API_KEY'
+      }), { status: 500, headers });
     }
+
+    console.log(`Completed in ${Date.now() - startTime}ms`);
 
     return new Response(JSON.stringify({ 
       success: true, 
       data: result.data,
-      provider: result.provider
-    }), {
-      status: 200,
-      headers,
-    });
+      provider: result.provider,
+      timeMs: Date.now() - startTime
+    }), { status: 200, headers });
 
   } catch (error: any) {
-    console.error('Parse diet error:', error);
-    console.error('Error stack:', error?.stack);
+    console.error('Parse diet error:', error?.message || error);
     return new Response(JSON.stringify({ 
       error: 'Failed to parse diet plan',
-      details: error instanceof Error ? error.message : String(error),
-      stack: error?.stack?.split('\n').slice(0, 5)
-    }), {
-      status: 500,
-      headers,
-    });
+      details: error?.message || String(error)
+    }), { status: 500, headers });
   }
 }
 
 async function callXAI(apiKey: string, image: string, mimeType: string) {
   const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
   
-  console.log('Calling xAI API, image size:', base64Data.length, 'bytes');
+  // Prova modelli in ordine di velocità
+  const models = ['grok-2-vision', 'grok-2-vision-1212'];
   
-  const requestBody = {
-    model: 'grok-2-vision-1212',
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'image_url',
-            image_url: {
-              url: `data:${mimeType};base64,${base64Data}`,
-            },
-          },
-          {
-            type: 'text',
-            text: `${SYSTEM_PROMPT}\n\nAnalizza questa immagine di un piano alimentare/dieta settimanale.\n\nEstrai TUTTI i dati in formato JSON seguendo questo schema:\n${JSON_SCHEMA}\n\nRispondi SOLO con il JSON valido, senza markdown.`,
-          },
-        ],
-      },
-    ],
-    max_tokens: 8000,
-  };
+  for (const model of models) {
+    try {
+      console.log(`Trying xAI model: ${model}`);
+      
+      const response = await fetch('https://api.x.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'image_url',
+                image_url: { url: `data:${mimeType};base64,${base64Data}` },
+              },
+              { type: 'text', text: PROMPT },
+            ],
+          }],
+          max_tokens: 4000,
+          temperature: 0.1,
+        }),
+      });
 
-  let response: Response;
-  try {
-    response = await fetch('https://api.x.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(requestBody),
-    });
-  } catch (fetchError: any) {
-    console.error('xAI fetch error:', fetchError);
-    throw new Error(`xAI fetch failed: ${fetchError.message}`);
+      if (!response.ok) {
+        const error = await response.text();
+        console.error(`xAI ${model} error:`, error);
+        continue; // Try next model
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+      
+      if (!content) {
+        console.error('No content in response');
+        continue;
+      }
+
+      return {
+        provider: `xai/${model}`,
+        data: parseJsonResponse(content)
+      };
+    } catch (e: any) {
+      console.error(`xAI ${model} failed:`, e?.message);
+      continue;
+    }
   }
-
-  console.log('xAI response status:', response.status);
-
-  if (!response.ok) {
-    const error = await response.text();
-    console.error('xAI error response:', error);
-    throw new Error(`xAI API error: ${response.status} ${error}`);
-  }
-
-  const data = await response.json();
-  console.log('xAI response received, has choices:', !!data.choices);
   
-  const content = data.choices?.[0]?.message?.content;
-  
-  if (!content) {
-    console.error('xAI response structure:', JSON.stringify(data).substring(0, 500));
-    throw new Error('No content in xAI response');
-  }
-
-  return {
-    provider: 'xai/grok-2-vision',
-    data: parseJsonResponse(content)
-  };
+  throw new Error('All xAI models failed');
 }
 
 async function callAnthropic(apiKey: string, image: string, mimeType: string) {
@@ -205,46 +168,28 @@ async function callAnthropic(apiKey: string, image: string, mimeType: string) {
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 8000,
-      system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: {
-                type: 'base64',
-                media_type: mimeType,
-                data: base64Data,
-              },
-            },
-            {
-              type: 'text',
-              text: `Analizza questa immagine di un piano alimentare/dieta settimanale.\n\nEstrai TUTTI i dati in formato JSON seguendo questo schema:\n${JSON_SCHEMA}\n\nRispondi SOLO con il JSON valido.`,
-            },
-          ],
-        },
-      ],
+      max_tokens: 4000,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64Data } },
+          { type: 'text', text: PROMPT },
+        ],
+      }],
     }),
   });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`Anthropic API error: ${response.status} ${error}`);
+    throw new Error(`Anthropic error: ${response.status} ${error}`);
   }
 
   const data = await response.json();
   const content = data.content?.[0]?.text;
   
-  if (!content) {
-    throw new Error('No content in Anthropic response');
-  }
+  if (!content) throw new Error('No content in Anthropic response');
 
-  return {
-    provider: 'anthropic/claude-sonnet',
-    data: parseJsonResponse(content)
-  };
+  return { provider: 'anthropic/claude-sonnet', data: parseJsonResponse(content) };
 }
 
 async function callOpenAI(apiKey: string, image: string, mimeType: string) {
@@ -258,64 +203,44 @@ async function callOpenAI(apiKey: string, image: string, mimeType: string) {
     },
     body: JSON.stringify({
       model: 'gpt-4o',
-      messages: [
-        {
-          role: 'system',
-          content: SYSTEM_PROMPT
-        },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:${mimeType};base64,${base64Data}`,
-              },
-            },
-            {
-              type: 'text',
-              text: `Analizza questa immagine di un piano alimentare/dieta settimanale.\n\nEstrai TUTTI i dati in formato JSON seguendo questo schema:\n${JSON_SCHEMA}\n\nRispondi SOLO con il JSON valido.`,
-            },
-          ],
-        },
-      ],
-      max_tokens: 8000,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}` } },
+          { type: 'text', text: PROMPT },
+        ],
+      }],
+      max_tokens: 4000,
+      temperature: 0.1,
     }),
   });
 
   if (!response.ok) {
     const error = await response.text();
-    throw new Error(`OpenAI API error: ${response.status} ${error}`);
+    throw new Error(`OpenAI error: ${response.status} ${error}`);
   }
 
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
   
-  if (!content) {
-    throw new Error('No content in OpenAI response');
-  }
+  if (!content) throw new Error('No content in OpenAI response');
 
-  return {
-    provider: 'openai/gpt-4o',
-    data: parseJsonResponse(content)
-  };
+  return { provider: 'openai/gpt-4o', data: parseJsonResponse(content) };
 }
 
 function parseJsonResponse(content: string): any {
-  let jsonText = content.trim();
+  let text = content.trim();
   
-  // Try to extract JSON if wrapped in markdown code block
-  const jsonMatch = jsonText.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) {
-    jsonText = jsonMatch[1].trim();
-  }
+  // Remove markdown code blocks
+  const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (match) text = match[1].trim();
   
-  // Remove any leading/trailing non-JSON characters
-  const jsonStart = jsonText.indexOf('{');
-  const jsonEnd = jsonText.lastIndexOf('}');
-  if (jsonStart !== -1 && jsonEnd !== -1) {
-    jsonText = jsonText.substring(jsonStart, jsonEnd + 1);
+  // Find JSON object
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start !== -1 && end !== -1) {
+    text = text.substring(start, end + 1);
   }
 
-  return JSON.parse(jsonText);
+  return JSON.parse(text);
 }
