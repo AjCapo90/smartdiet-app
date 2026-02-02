@@ -19,26 +19,35 @@ interface QuickMeal {
       <!-- Header -->
       <div class="flex justify-between items-center">
         <div>
-          <h1 class="text-2xl font-bold text-gray-900">Log Meal</h1>
-          <p class="text-gray-500">Track what you ate</p>
+          <h1 class="text-2xl font-bold text-gray-900">Registra Pasto</h1>
+          <p class="text-gray-500">Cosa hai mangiato?</p>
         </div>
       </div>
 
       <!-- Quick Log from Diet Plan -->
       @if (todayPlannedMeals().length > 0) {
         <div class="card">
-          <h3 class="font-semibold text-gray-900 mb-4">📋 From Today's Plan</h3>
-          <p class="text-sm text-gray-500 mb-4">Tap a meal to log it as eaten</p>
+          <h3 class="font-semibold text-gray-900 mb-4">📋 Piano di Oggi</h3>
+          <p class="text-sm text-gray-500 mb-4">Tocca un pasto per loggarlo</p>
           
           <div class="grid gap-3 sm:grid-cols-2">
             @for (meal of todayPlannedMeals(); track meal.id) {
               <button 
                 (click)="logPlannedMeal(meal)"
-                class="p-4 bg-gray-50 rounded-xl hover:bg-primary-50 hover:border-primary-300 border border-transparent transition-all text-left"
+                class="p-4 rounded-xl border transition-all text-left relative"
+                [ngClass]="{
+                  'bg-green-50 border-green-300': meal.isLogged,
+                  'bg-gray-50 border-transparent hover:bg-primary-50 hover:border-primary-300': !meal.isLogged
+                }"
               >
+                @if (meal.isLogged) {
+                  <div class="absolute top-2 right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                    <span class="text-white text-sm">✓</span>
+                  </div>
+                }
                 <div class="flex items-center gap-2 mb-2">
                   <span class="text-lg">{{ getMealIcon(meal.displayType) }}</span>
-                  <span class="text-xs text-gray-500 uppercase">{{ meal.displayType }}</span>
+                  <span class="text-xs text-gray-500 uppercase">{{ getMealTypeLabel(meal.displayType) }}</span>
                 </div>
                 <h4 class="font-medium text-gray-900 text-sm">{{ meal.name }}</h4>
                 <div class="flex gap-2 mt-2 text-xs text-gray-500">
@@ -58,25 +67,25 @@ interface QuickMeal {
 
       <!-- Manual Entry Form -->
       <div class="card">
-        <h3 class="font-semibold text-gray-900 mb-4">✏️ Manual Entry</h3>
+        <h3 class="font-semibold text-gray-900 mb-4">✏️ Inserimento Manuale</h3>
         
         <form (ngSubmit)="submitManualMeal()" class="space-y-4">
           <!-- Meal Name -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Meal Name</label>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Nome Pasto</label>
             <input
               type="text"
               [(ngModel)]="manualMeal.name"
               name="name"
               class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              placeholder="e.g., Grilled Chicken Salad"
+              placeholder="es. Pollo alla griglia con insalata"
               required
             />
           </div>
 
           <!-- Meal Type -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">Type</label>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
             <div class="grid grid-cols-4 gap-2">
               @for (type of mealTypes; track type.value) {
                 <button
@@ -98,7 +107,7 @@ interface QuickMeal {
           <!-- Macros Grid -->
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Calories</label>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Calorie</label>
               <input
                 type="number"
                 [(ngModel)]="manualMeal.calories"
@@ -110,7 +119,7 @@ interface QuickMeal {
               />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Protein (g)</label>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Proteine (g)</label>
               <input
                 type="number"
                 [(ngModel)]="manualMeal.protein"
@@ -121,7 +130,7 @@ interface QuickMeal {
               />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Carbs (g)</label>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Carboidrati (g)</label>
               <input
                 type="number"
                 [(ngModel)]="manualMeal.carbs"
@@ -132,7 +141,7 @@ interface QuickMeal {
               />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Fat (g)</label>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Grassi (g)</label>
               <input
                 type="number"
                 [(ngModel)]="manualMeal.fat"
@@ -155,7 +164,7 @@ interface QuickMeal {
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
               </svg>
-              {{ isListening() ? 'Listening...' : 'Voice Input' }}
+              {{ isListening() ? 'In ascolto...' : 'Input Vocale' }}
             </button>
           }
 
@@ -164,7 +173,7 @@ interface QuickMeal {
             class="w-full btn btn-primary py-3"
             [disabled]="!manualMeal.name || !manualMeal.calories"
           >
-            Log Meal
+            Registra Pasto
           </button>
         </form>
       </div>
@@ -172,7 +181,7 @@ interface QuickMeal {
       <!-- Recent Meals -->
       @if (recentMeals().length > 0) {
         <div class="card">
-          <h3 class="font-semibold text-gray-900 mb-4">⏱️ Recent (Tap to log again)</h3>
+          <h3 class="font-semibold text-gray-900 mb-4">⏱️ Recenti (tocca per loggare)</h3>
           <div class="space-y-2">
             @for (meal of recentMeals(); track $index) {
               <button 
@@ -199,7 +208,7 @@ interface QuickMeal {
           <div class="flex items-center gap-3">
             <span class="text-xl">✅</span>
             <div>
-              <p class="font-medium">Meal logged!</p>
+              <p class="font-medium">Pasto registrato!</p>
               <p class="text-sm text-green-100">{{ lastLoggedMeal() }}</p>
             </div>
           </div>
@@ -212,11 +221,19 @@ export class MealLogComponent {
   private storage = inject(StorageService);
 
   mealTypes = [
-    { value: 'breakfast' as const, label: 'Breakfast', icon: '🌅' },
-    { value: 'lunch' as const, label: 'Lunch', icon: '☀️' },
-    { value: 'dinner' as const, label: 'Dinner', icon: '🌙' },
-    { value: 'snack' as const, label: 'Snack', icon: '🍎' },
+    { value: 'breakfast' as const, label: 'Colazione', icon: '🌅' },
+    { value: 'lunch' as const, label: 'Pranzo', icon: '☀️' },
+    { value: 'dinner' as const, label: 'Cena', icon: '🌙' },
+    { value: 'snack' as const, label: 'Spuntino', icon: '🍎' },
   ];
+
+  // Meal type labels in Italian
+  mealTypeLabels: Record<string, string> = {
+    'breakfast': 'COLAZIONE',
+    'lunch': 'PRANZO', 
+    'dinner': 'CENA',
+    'snack': 'SPUNTINO'
+  };
 
   manualMeal = {
     name: '',
@@ -232,16 +249,25 @@ export class MealLogComponent {
   lastLoggedMeal = signal('');
   voiceSupported = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
 
-  // Get planned meals for today
+  // Get planned meals for today with logged status
   todayPlannedMeals = computed(() => {
     const plan = this.storage.dietPlan();
     if (!plan) return [];
     
     const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
     const dayPlan = plan.days.find(d => d.day === today);
+    const todayLogs = this.storage.todayLogs();
     
-    return dayPlan?.meals || [];
+    return (dayPlan?.meals || []).map(meal => ({
+      ...meal,
+      isLogged: todayLogs.some(log => log.plannedMealId === meal.id)
+    }));
   });
+
+  // Get Italian meal type label
+  getMealTypeLabel(type: string): string {
+    return this.mealTypeLabels[type.toLowerCase()] || type.toUpperCase();
+  }
 
   // Get unique recent meals (last 7 days, deduplicated by name)
   recentMeals = computed((): QuickMeal[] => {
