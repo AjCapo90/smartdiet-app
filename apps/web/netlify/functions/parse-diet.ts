@@ -62,11 +62,23 @@ export default async function handler(req: Request, context: Context) {
     const ocrTime = Date.now() - startTime;
     console.log(`OCR completed in ${ocrTime}ms, text length: ${ocrText.length}`);
 
-    if (!ocrText || ocrText.length < 50) {
+    if (!ocrText || ocrText.length < 10) {
       return new Response(JSON.stringify({ 
         error: 'OCR failed to extract text',
-        details: 'Could not read text from image'
+        details: 'Could not read text from image',
+        ocrTextLength: ocrText?.length || 0
       }), { status: 400, headers });
+    }
+
+    // Debug: return OCR text if requested
+    if (body.ocrOnly) {
+      return new Response(JSON.stringify({
+        success: true,
+        ocrText: ocrText.substring(0, 2000),
+        ocrTextLength: ocrText.length,
+        ocrTimeMs: ocrTime,
+        provider: ocrProvider
+      }), { status: 200, headers });
     }
 
     // Step 2: Structure with GPT (text-only = fast!)
