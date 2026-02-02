@@ -64,11 +64,22 @@ export class OcrService {
 
     try {
       this.progress.set(10);
+      this.status.set('Compressione immagine...');
+      
+      // Compress image before upload using createImageBitmap (iOS compatible)
+      let fileToUpload = imageFile;
+      try {
+        fileToUpload = await this.compressForUpload(imageFile);
+        console.log(`Compressed: ${(imageFile.size/1024).toFixed(0)}KB -> ${(fileToUpload.size/1024).toFixed(0)}KB`);
+      } catch (e) {
+        console.warn('Compression failed, using original:', e);
+      }
+      
       this.status.set('Preparazione upload...');
       
-      // Use FormData - native file upload, much more iOS compatible
+      // Use FormData - native file upload
       const formData = new FormData();
-      formData.append('image', imageFile);
+      formData.append('image', fileToUpload);
       
       console.log('Uploading file:', imageFile.name, (imageFile.size / 1024).toFixed(0), 'KB');
       
@@ -154,6 +165,57 @@ export class OcrService {
       };
       reader.onerror = () => reject(new Error('Errore lettura file'));
       reader.readAsDataURL(file);
+    });
+  }
+
+  // Compress image for upload - returns File
+  private async compressForUpload(file: File): Promise<File> {
+    return new Promise(async (resolve, reject) => {
+      try {
+        // Use createImageBitmap which is more efficient and iOS compatible
+        const bitmap = await createImageBitmap(file);
+        
+        let { width, height } = bitmap;
+        const maxSize = 1200;
+        
+        // Calculate new dimensions
+        if (width > maxSize || height > maxSize) {
+          if (width > height) {
+            height = Math.round((height * maxSize) / width);
+            width = maxSize;
+          } else {
+            width = Math.round((width * maxSize) / height);
+            height = maxSize;
+          }
+        }
+        
+        // Draw to canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+        ctx.drawImage(bitmap, 0, 0, width, height);
+        bitmap.close();
+        
+        // Convert to blob
+        canvas.toBlob(
+          (blob) => {
+            if (blob && blob.size < file.size) {
+              resolve(new File([blob], file.name, { type: 'image/jpeg' }));
+            } else {
+              resolve(file);
+            }
+          },
+          'image/jpeg',
+          0.8
+        );
+      } catch (e) {
+        reject(e);
+      }
     });
   }
 
