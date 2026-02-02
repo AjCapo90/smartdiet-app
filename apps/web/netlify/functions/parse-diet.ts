@@ -1,5 +1,5 @@
 import type { Context } from '@netlify/functions';
-import Jimp from 'jimp';
+const Jimp = require('jimp');
 
 const STRUCTURE_PROMPT = `Parse diet text to JSON. Format: {"days":[{"day":"Lun","meals":[{"t":"b","f":["40g avena","1 uovo"]}]}]}
 t=b(breakfast),s(snack),l(lunch),d(dinner). Keep food strings short. JSON only.`;
