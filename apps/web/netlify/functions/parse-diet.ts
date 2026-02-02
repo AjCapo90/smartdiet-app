@@ -113,11 +113,13 @@ export default async function handler(req: Request, context: Context) {
       headers,
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Parse diet error:', error);
+    console.error('Error stack:', error?.stack);
     return new Response(JSON.stringify({ 
       error: 'Failed to parse diet plan',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: error instanceof Error ? error.message : String(error),
+      stack: error?.stack?.split('\n').slice(0, 5)
     }), {
       status: 500,
       headers,
@@ -128,48 +130,60 @@ export default async function handler(req: Request, context: Context) {
 async function callXAI(apiKey: string, image: string, mimeType: string) {
   const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
   
-  const response = await fetch('https://api.x.ai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'grok-2-vision-1212',
-      messages: [
-        {
-          role: 'system',
-          content: SYSTEM_PROMPT
-        },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:${mimeType};base64,${base64Data}`,
-              },
+  console.log('Calling xAI API, image size:', base64Data.length, 'bytes');
+  
+  const requestBody = {
+    model: 'grok-2-vision-1212',
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:${mimeType};base64,${base64Data}`,
             },
-            {
-              type: 'text',
-              text: `Analizza questa immagine di un piano alimentare/dieta settimanale.\n\nEstrai TUTTI i dati in formato JSON seguendo questo schema:\n${JSON_SCHEMA}\n\nRispondi SOLO con il JSON valido.`,
-            },
-          ],
-        },
-      ],
-      max_tokens: 8000,
-    }),
-  });
+          },
+          {
+            type: 'text',
+            text: `${SYSTEM_PROMPT}\n\nAnalizza questa immagine di un piano alimentare/dieta settimanale.\n\nEstrai TUTTI i dati in formato JSON seguendo questo schema:\n${JSON_SCHEMA}\n\nRispondi SOLO con il JSON valido, senza markdown.`,
+          },
+        ],
+      },
+    ],
+    max_tokens: 8000,
+  };
+
+  let response: Response;
+  try {
+    response = await fetch('https://api.x.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(requestBody),
+    });
+  } catch (fetchError: any) {
+    console.error('xAI fetch error:', fetchError);
+    throw new Error(`xAI fetch failed: ${fetchError.message}`);
+  }
+
+  console.log('xAI response status:', response.status);
 
   if (!response.ok) {
     const error = await response.text();
+    console.error('xAI error response:', error);
     throw new Error(`xAI API error: ${response.status} ${error}`);
   }
 
   const data = await response.json();
+  console.log('xAI response received, has choices:', !!data.choices);
+  
   const content = data.choices?.[0]?.message?.content;
   
   if (!content) {
+    console.error('xAI response structure:', JSON.stringify(data).substring(0, 500));
     throw new Error('No content in xAI response');
   }
 
