@@ -63,16 +63,17 @@ export class OcrService {
     this.lastError.set(null);
 
     try {
-      // Check file size (max 10MB)
-      const maxSize = 10 * 1024 * 1024;
-      if (imageFile.size > maxSize) {
-        throw new Error(`Immagine troppo grande (${(imageFile.size / 1024 / 1024).toFixed(1)}MB). Max 10MB.`);
-      }
+      // Resize image if needed (max 1200px, quality 80%)
+      this.progress.set(5);
+      this.status.set('Ottimizzazione immagine...');
+      const optimizedFile = await this.resizeImage(imageFile, 1200, 0.8);
+      
+      console.log(`Image optimized: ${(imageFile.size / 1024).toFixed(0)}KB -> ${(optimizedFile.size / 1024).toFixed(0)}KB`);
 
       // Convert file to base64
-      this.progress.set(10);
-      this.status.set(`Preparazione immagine (${(imageFile.size / 1024).toFixed(0)}KB)...`);
-      const base64 = await this.fileToBase64(imageFile);
+      this.progress.set(15);
+      this.status.set(`Preparazione immagine (${(optimizedFile.size / 1024).toFixed(0)}KB)...`);
+      const base64 = await this.fileToBase64(optimizedFile);
       
       this.status.set('Invio all\'AI per analisi...');
       this.progress.set(30);
@@ -159,6 +160,62 @@ export class OcrService {
         resolve(result.split(',')[1] || result);
       };
       reader.onerror = () => reject(new Error('Errore lettura file'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  private resizeImage(file: File, maxSize: number, quality: number): Promise<File> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      img.onload = () => {
+        let { width, height } = img;
+        
+        // Calculate new dimensions
+        if (width > maxSize || height > maxSize) {
+          if (width > height) {
+            height = Math.round((height * maxSize) / width);
+            width = maxSize;
+          } else {
+            width = Math.round((width * maxSize) / height);
+            height = maxSize;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        
+        // Draw and compress
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const resizedFile = new File([blob], file.name, { 
+                type: 'image/jpeg',
+                lastModified: Date.now()
+              });
+              resolve(resizedFile);
+            } else {
+              // If resize fails, return original
+              resolve(file);
+            }
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+      
+      img.onerror = () => resolve(file); // On error, return original
+      
+      // Load image from file
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => resolve(file);
       reader.readAsDataURL(file);
     });
   }
