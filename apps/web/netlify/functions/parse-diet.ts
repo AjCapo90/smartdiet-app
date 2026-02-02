@@ -31,16 +31,9 @@ export default async function handler(req: Request, context: Context) {
         return new Response(JSON.stringify({ error: 'No image in form data' }), { status: 400, headers });
       }
       
-      // Convert file to base64
+      // Convert file to base64 using Buffer (faster in Node.js)
       const arrayBuffer = await file.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
-      let binary = '';
-      const chunkSize = 8192;
-      for (let i = 0; i < bytes.length; i += chunkSize) {
-        const chunk = bytes.subarray(i, i + chunkSize);
-        binary += String.fromCharCode.apply(null, Array.from(chunk));
-      }
-      image = btoa(binary);
+      image = Buffer.from(arrayBuffer).toString('base64');
       mimeType = file.type || 'image/jpeg';
       
       console.log(`FormData file: ${file.name}, ${(file.size/1024).toFixed(0)}KB, ${mimeType}`);
