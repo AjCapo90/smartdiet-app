@@ -99,61 +99,66 @@ export default async function handler(req: Request, context: Context) {
 async function callXAI(apiKey: string, image: string, mimeType: string) {
   const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
   
-  // Prova modelli in ordine di velocità
-  const models = ['grok-2-vision', 'grok-2-vision-1212'];
+  // Usa grok-2-vision con streaming per evitare timeout
+  const model = 'grok-2-vision-1212';
+  console.log(`Calling xAI ${model} with streaming...`);
   
-  for (const model of models) {
-    try {
-      console.log(`Trying xAI model: ${model}`);
-      
-      const response = await fetch('https://api.x.ai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: [{
-            role: 'user',
-            content: [
-              {
-                type: 'image_url',
-                image_url: { url: `data:${mimeType};base64,${base64Data}` },
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 24000); // 24 sec timeout
+  
+  try {
+    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: { 
+                url: `data:${mimeType};base64,${base64Data}`,
+                detail: 'low' // Use low detail for faster processing
               },
-              { type: 'text', text: PROMPT },
-            ],
-          }],
-          max_tokens: 4000,
-          temperature: 0.1,
-        }),
-      });
+            },
+            { type: 'text', text: PROMPT },
+          ],
+        }],
+        max_tokens: 3000,
+        temperature: 0,
+      }),
+      signal: controller.signal,
+    });
+    
+    clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        const error = await response.text();
-        console.error(`xAI ${model} error:`, error);
-        continue; // Try next model
-      }
-
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content;
-      
-      if (!content) {
-        console.error('No content in response');
-        continue;
-      }
-
-      return {
-        provider: `xai/${model}`,
-        data: parseJsonResponse(content)
-      };
-    } catch (e: any) {
-      console.error(`xAI ${model} failed:`, e?.message);
-      continue;
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`xAI error: ${response.status} ${error}`);
     }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    
+    if (!content) {
+      throw new Error('No content in xAI response');
+    }
+
+    return {
+      provider: `xai/${model}`,
+      data: parseJsonResponse(content)
+    };
+  } catch (e: any) {
+    clearTimeout(timeoutId);
+    if (e.name === 'AbortError') {
+      throw new Error('xAI timeout after 24 seconds');
+    }
+    throw e;
   }
-  
-  throw new Error('All xAI models failed');
 }
 
 async function callAnthropic(apiKey: string, image: string, mimeType: string) {
