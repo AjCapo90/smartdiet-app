@@ -63,22 +63,29 @@ export class OcrService {
     this.lastError.set(null);
 
     try {
-      // Convert file to base64 directly (resize causes issues on iOS)
+      // Compress image for upload (iOS compatible method)
       this.progress.set(10);
-      this.status.set(`Preparazione immagine (${(imageFile.size / 1024).toFixed(0)}KB)...`);
-      const base64 = await this.fileToBase64(imageFile);
-      const optimizedFile = imageFile; // Keep reference for later
+      this.status.set('Compressione immagine...');
       
-      console.log(`Image size: ${(imageFile.size / 1024).toFixed(0)}KB, base64: ${(base64.length / 1024).toFixed(0)}KB`);
+      let base64: string;
+      try {
+        base64 = await this.compressImageForUpload(imageFile, 1200, 0.7);
+        console.log(`Compressed: ${(imageFile.size / 1024).toFixed(0)}KB -> ${(base64.length / 1024).toFixed(0)}KB base64`);
+      } catch (e) {
+        console.error('Compression failed, using original:', e);
+        base64 = await this.fileToBase64(imageFile);
+      }
+      
+      const optimizedFile = imageFile;
       
       this.status.set('Invio all\'AI per analisi...');
       this.progress.set(30);
 
       console.log('Sending to API:', this.API_URL, 'Base64 length:', base64.length);
 
-      // Check payload size (max ~5MB for most browsers)
-      if (base64.length > 5 * 1024 * 1024) {
-        throw new Error('Immagine troppo grande. Prova con una foto più piccola.');
+      // Check payload size (max ~2MB after compression should be fine)
+      if (base64.length > 3 * 1024 * 1024) {
+        throw new Error('Immagine ancora troppo grande dopo compressione. Prova con una foto a risoluzione più bassa.');
       }
 
       // Call the Netlify function with timeout
@@ -172,6 +179,66 @@ export class OcrService {
         resolve(result.split(',')[1] || result);
       };
       reader.onerror = () => reject(new Error('Errore lettura file'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // iOS-compatible image compression using toDataURL
+  private compressImageForUpload(file: File, maxSize: number, quality: number): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      
+      img.onload = () => {
+        try {
+          let { width, height } = img;
+          
+          // Calculate new dimensions
+          if (width > maxSize || height > maxSize) {
+            if (width > height) {
+              height = Math.round((height * maxSize) / width);
+              width = maxSize;
+            } else {
+              width = Math.round((width * maxSize) / height);
+              height = maxSize;
+            }
+          }
+          
+          // Create canvas and draw
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Canvas not supported'));
+            return;
+          }
+          
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // Get base64 directly (more compatible than toBlob)
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          const base64 = dataUrl.split(',')[1];
+          
+          if (!base64 || base64.length < 100) {
+            reject(new Error('Compression produced invalid output'));
+            return;
+          }
+          
+          resolve(base64);
+        } catch (e) {
+          reject(e);
+        }
+      };
+      
+      img.onerror = () => reject(new Error('Failed to load image'));
+      
+      // Load image from file
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
       reader.readAsDataURL(file);
     });
   }
