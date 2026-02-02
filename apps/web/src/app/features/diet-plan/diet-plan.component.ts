@@ -1,200 +1,350 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, inject, computed } from '@angular/core';
 import { RouterLink } from '@angular/router';
-
-interface PlannedMeal {
-  id: string;
-  name: string;
-  type: string;
-  macros: { calories: number; protein: number; carbs: number; fat: number };
-}
-
-interface DayPlan {
-  day: string;
-  shortDay: string;
-  meals: PlannedMeal[];
-}
+import { NgClass } from '@angular/common';
+import { OcrService, ParsedDietPlan, ParsedMeal } from '../../core/services/ocr.service';
+import { StorageService, DietPlan, DayPlan, PlannedMeal, FoodItem } from '../../core/services/storage.service';
 
 @Component({
   selector: 'app-diet-plan',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, NgClass],
   template: `
-    <div class="space-y-6 animate-fade-in">
+    <div class="space-y-6 pb-24 animate-fade-in">
       <!-- Header -->
       <div class="flex justify-between items-start">
         <div>
-          <h1 class="text-2xl font-bold text-gray-900">{{ activePlan().name }}</h1>
-          <p class="text-gray-500 mt-1">Weekly targets: {{ activePlan().weeklyTargets.calories }} kcal</p>
+          <h1 class="text-2xl font-bold text-gray-900">
+            {{ activePlan()?.name || 'Nessuna Dieta' }}
+          </h1>
+          @if (activePlan()) {
+            <p class="text-gray-500 mt-1">
+              {{ activePlan()?.weeklyTargets?.calories || 0 }} kcal/settimana
+            </p>
+          }
         </div>
         <div class="flex gap-2">
-          <button routerLink="/diet-plan/new" class="btn btn-outline">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-            </svg>
-            New Plan
-          </button>
-          <button class="btn btn-primary">
+          <label class="btn btn-primary cursor-pointer">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
-            Upload Photo
-          </button>
+            📷 Carica Foto
+            <input 
+              type="file" 
+              accept="image/*" 
+              capture="environment"
+              class="hidden" 
+              (change)="onFileSelected($event)"
+            />
+          </label>
         </div>
       </div>
-      
-      <!-- Weekly Targets Card -->
-      <div class="card">
-        <h3 class="font-semibold text-gray-900 mb-4">Weekly Macro Targets</h3>
-        <div class="grid grid-cols-4 gap-4">
-          <div class="text-center p-4 bg-amber-50 rounded-xl">
-            <p class="text-2xl font-bold text-amber-600">{{ activePlan().weeklyTargets.calories }}</p>
-            <p class="text-sm text-gray-600">kcal</p>
-          </div>
-          <div class="text-center p-4 bg-red-50 rounded-xl">
-            <p class="text-2xl font-bold text-red-500">{{ activePlan().weeklyTargets.protein }}g</p>
-            <p class="text-sm text-gray-600">protein</p>
-          </div>
-          <div class="text-center p-4 bg-blue-50 rounded-xl">
-            <p class="text-2xl font-bold text-blue-500">{{ activePlan().weeklyTargets.carbs }}g</p>
-            <p class="text-sm text-gray-600">carbs</p>
-          </div>
-          <div class="text-center p-4 bg-yellow-50 rounded-xl">
-            <p class="text-2xl font-bold text-yellow-600">{{ activePlan().weeklyTargets.fat }}g</p>
-            <p class="text-sm text-gray-600">fat</p>
+
+      <!-- OCR Processing Modal -->
+      @if (ocr.isProcessing()) {
+        <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div class="bg-white rounded-2xl p-8 max-w-sm w-full mx-4 text-center">
+            <div class="w-16 h-16 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mx-auto mb-4"></div>
+            <h3 class="text-lg font-semibold text-gray-900 mb-2">Analisi con AI</h3>
+            <p class="text-gray-500 mb-4">{{ ocr.status() }}</p>
+            <div class="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                class="bg-primary-600 h-2 rounded-full transition-all duration-300"
+                [style.width.%]="ocr.progress()"
+              ></div>
+            </div>
+            <p class="text-sm text-gray-400 mt-2">{{ ocr.progress() }}%</p>
           </div>
         </div>
-      </div>
-      
-      <!-- Week Grid -->
-      <div class="space-y-4">
-        @for (day of weekPlan(); track day.day) {
-          <div class="card">
-            <div class="flex items-center justify-between mb-4">
-              <h3 class="font-semibold text-gray-900">{{ day.day }}</h3>
-              <span class="text-sm text-gray-500">{{ getDayMacros(day) }} kcal</span>
+      }
+
+      <!-- Error Message -->
+      @if (errorMessage()) {
+        <div class="card bg-red-50 border border-red-200">
+          <div class="flex items-start gap-3">
+            <span class="text-2xl">❌</span>
+            <div class="flex-1">
+              <h3 class="font-semibold text-red-800">Errore</h3>
+              <p class="text-sm text-red-700 mt-1">{{ errorMessage() }}</p>
+              <button 
+                (click)="errorMessage.set(null)"
+                class="text-sm text-red-600 hover:text-red-800 mt-2"
+              >
+                Chiudi
+              </button>
             </div>
-            
-            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              @for (meal of day.meals; track meal.id) {
-                <div class="p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors cursor-pointer">
-                  <div class="flex items-center gap-2 mb-2">
-                    <span class="text-lg">{{ getMealIcon(meal.type) }}</span>
-                    <span class="text-xs text-gray-500 uppercase">{{ meal.type }}</span>
-                  </div>
-                  <h4 class="font-medium text-gray-900 text-sm">{{ meal.name }}</h4>
-                  <div class="flex gap-2 mt-2 text-xs text-gray-500">
-                    <span>{{ meal.macros.calories }} kcal</span>
-                    <span>·</span>
-                    <span>{{ meal.macros.protein }}g P</span>
-                  </div>
-                </div>
-              }
-              
-              @if (day.meals.length < 4) {
-                <button class="p-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-primary-400 hover:bg-primary-50 transition-colors flex flex-col items-center justify-center text-gray-400 hover:text-primary-600">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                  </svg>
-                  <span class="text-xs mt-1">Add meal</span>
-                </button>
-              }
+          </div>
+        </div>
+      }
+
+      <!-- No Plan State -->
+      @if (!activePlan()) {
+        <div class="card text-center py-12">
+          <div class="text-6xl mb-4">📋</div>
+          <h3 class="text-xl font-semibold text-gray-900 mb-2">Nessuna Dieta Caricata</h3>
+          <p class="text-gray-500 mb-6">
+            Scatta una foto della tua dieta dalla nutrizionista.<br>
+            L'AI la analizzerà ed estrarrà tutti i pasti automaticamente.
+          </p>
+          <label class="btn btn-primary cursor-pointer inline-flex">
+            📷 Scatta Foto Dieta
+            <input type="file" accept="image/*" capture="environment" class="hidden" (change)="onFileSelected($event)" />
+          </label>
+        </div>
+      }
+
+      @if (activePlan()) {
+        <!-- Weekly Targets Card -->
+        <div class="card">
+          <h3 class="font-semibold text-gray-900 mb-4">Obiettivi Settimanali</h3>
+          <div class="grid grid-cols-4 gap-3">
+            <div class="text-center p-3 bg-amber-50 rounded-xl">
+              <p class="text-xl font-bold text-amber-600">{{ activePlan()?.weeklyTargets?.calories || 0 }}</p>
+              <p class="text-xs text-gray-600">kcal</p>
             </div>
+            <div class="text-center p-3 bg-red-50 rounded-xl">
+              <p class="text-xl font-bold text-red-500">{{ activePlan()?.weeklyTargets?.protein || 0 }}g</p>
+              <p class="text-xs text-gray-600">proteine</p>
+            </div>
+            <div class="text-center p-3 bg-blue-50 rounded-xl">
+              <p class="text-xl font-bold text-blue-500">{{ activePlan()?.weeklyTargets?.carbs || 0 }}g</p>
+              <p class="text-xs text-gray-600">carbo</p>
+            </div>
+            <div class="text-center p-3 bg-yellow-50 rounded-xl">
+              <p class="text-xl font-bold text-yellow-600">{{ activePlan()?.weeklyTargets?.fat || 0 }}g</p>
+              <p class="text-xs text-gray-600">grassi</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        @if (activePlan()?.notes?.length) {
+          <div class="card bg-blue-50 border border-blue-200">
+            <h3 class="font-semibold text-blue-800 mb-2">📝 Note dalla nutrizionista</h3>
+            <ul class="text-sm text-blue-700 space-y-1">
+              @for (note of activePlan()?.notes; track note) {
+                <li>• {{ note }}</li>
+              }
+            </ul>
           </div>
         }
-      </div>
+      
+        <!-- Week Grid -->
+        <div class="space-y-4">
+          @for (day of weekPlan(); track day.day) {
+            <div class="card">
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <h3 class="font-semibold text-gray-900">{{ day.dayItalian }}</h3>
+                  <p class="text-sm text-gray-500">{{ getDayMacros(day) }} kcal</p>
+                </div>
+                @if (isToday(day.day)) {
+                  <span class="px-2 py-1 bg-primary-100 text-primary-700 text-xs font-medium rounded-full">
+                    Oggi
+                  </span>
+                }
+              </div>
+              
+              <div class="space-y-3">
+                @for (meal of day.meals; track meal.id) {
+                  <div 
+                    class="p-4 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors"
+                    (click)="toggleMealExpand(meal.id)"
+                  >
+                    <!-- Meal Header -->
+                    <div class="flex items-center justify-between">
+                      <div class="flex items-center gap-3">
+                        <span class="text-2xl">{{ getMealIcon(meal.displayType) }}</span>
+                        <div>
+                          <h4 class="font-medium text-gray-900">{{ getMealTypeLabel(meal.type) }}</h4>
+                          @if (meal.time) {
+                            <p class="text-xs text-gray-500">{{ meal.time }}</p>
+                          }
+                        </div>
+                      </div>
+                      <div class="text-right">
+                        <p class="font-semibold text-gray-900">{{ meal.macros.calories }} kcal</p>
+                        <p class="text-xs text-gray-500">
+                          P:{{ meal.macros.protein }}g · C:{{ meal.macros.carbs }}g · G:{{ meal.macros.fat }}g
+                        </p>
+                      </div>
+                    </div>
+
+                    <!-- Expanded Foods List -->
+                    @if (expandedMeals().has(meal.id)) {
+                      <div class="mt-4 pt-4 border-t border-gray-200 space-y-2">
+                        @for (food of meal.foods; track food.name) {
+                          <div class="flex items-center justify-between text-sm">
+                            <span class="text-gray-700" [ngClass]="{'italic text-gray-400': food.isOptional}">
+                              {{ food.isOptional ? '(opz.) ' : '' }}{{ food.quantity }}{{ food.unit }} {{ food.name }}
+                            </span>
+                            <span class="text-gray-500">{{ food.macros.calories }} kcal</span>
+                          </div>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+
+        <!-- Actions -->
+        <div class="card bg-gray-50">
+          <button 
+            (click)="clearPlan()"
+            class="w-full py-3 text-red-600 hover:text-red-800 font-medium"
+          >
+            🗑️ Elimina dieta e ricarica
+          </button>
+        </div>
+      }
     </div>
   `
 })
 export class DietPlanComponent {
-  activePlan = signal({
-    id: '1',
-    name: 'My Diet Plan',
-    weeklyTargets: {
-      calories: 14000,
-      protein: 700,
-      carbs: 1750,
-      fat: 490
-    }
+  protected ocr = inject(OcrService);
+  private storage = inject(StorageService);
+
+  activePlan = this.storage.dietPlan;
+  errorMessage = signal<string | null>(null);
+  expandedMeals = signal<Set<string>>(new Set());
+
+  weekPlan = computed(() => {
+    const plan = this.activePlan();
+    if (!plan) return [];
+    return plan.days;
   });
-  
-  weekPlan = signal<DayPlan[]>([
-    {
-      day: 'Monday',
-      shortDay: 'Mon',
-      meals: [
-        { id: '1', name: 'Oatmeal with Berries', type: 'Breakfast', macros: { calories: 420, protein: 15, carbs: 65, fat: 12 } },
-        { id: '2', name: 'Grilled Chicken Salad', type: 'Lunch', macros: { calories: 580, protein: 45, carbs: 25, fat: 28 } },
-        { id: '3', name: 'Salmon with Vegetables', type: 'Dinner', macros: { calories: 650, protein: 42, carbs: 35, fat: 35 } },
-        { id: '4', name: 'Protein Shake', type: 'Snack', macros: { calories: 250, protein: 30, carbs: 15, fat: 8 } },
-      ]
-    },
-    {
-      day: 'Tuesday',
-      shortDay: 'Tue',
-      meals: [
-        { id: '5', name: 'Eggs on Toast', type: 'Breakfast', macros: { calories: 380, protein: 22, carbs: 35, fat: 18 } },
-        { id: '6', name: 'Turkey Wrap', type: 'Lunch', macros: { calories: 520, protein: 35, carbs: 45, fat: 22 } },
-        { id: '7', name: 'Beef Stir Fry', type: 'Dinner', macros: { calories: 680, protein: 48, carbs: 40, fat: 32 } },
-        { id: '8', name: 'Greek Yogurt', type: 'Snack', macros: { calories: 180, protein: 18, carbs: 12, fat: 6 } },
-      ]
-    },
-    {
-      day: 'Wednesday',
-      shortDay: 'Wed',
-      meals: [
-        { id: '9', name: 'Smoothie Bowl', type: 'Breakfast', macros: { calories: 450, protein: 20, carbs: 60, fat: 15 } },
-        { id: '10', name: 'Tuna Sandwich', type: 'Lunch', macros: { calories: 490, protein: 32, carbs: 42, fat: 20 } },
-        { id: '11', name: 'Grilled Pork Chop', type: 'Dinner', macros: { calories: 620, protein: 45, carbs: 30, fat: 35 } },
-      ]
-    },
-    {
-      day: 'Thursday',
-      shortDay: 'Thu',
-      meals: [
-        { id: '12', name: 'Avocado Toast', type: 'Breakfast', macros: { calories: 380, protein: 12, carbs: 35, fat: 24 } },
-        { id: '13', name: 'Buddha Bowl', type: 'Lunch', macros: { calories: 550, protein: 28, carbs: 55, fat: 25 } },
-        { id: '14', name: 'Chicken Curry', type: 'Dinner', macros: { calories: 680, protein: 42, carbs: 50, fat: 32 } },
-        { id: '15', name: 'Almonds', type: 'Snack', macros: { calories: 160, protein: 6, carbs: 6, fat: 14 } },
-      ]
-    },
-    {
-      day: 'Friday',
-      shortDay: 'Fri',
-      meals: [
-        { id: '16', name: 'Pancakes with Fruit', type: 'Breakfast', macros: { calories: 480, protein: 14, carbs: 70, fat: 16 } },
-        { id: '17', name: 'Salmon Salad', type: 'Lunch', macros: { calories: 520, protein: 38, carbs: 22, fat: 32 } },
-        { id: '18', name: 'Pizza Night', type: 'Dinner', macros: { calories: 750, protein: 32, carbs: 80, fat: 35 } },
-      ]
-    },
-    {
-      day: 'Saturday',
-      shortDay: 'Sat',
-      meals: [
-        { id: '19', name: 'Full English', type: 'Breakfast', macros: { calories: 650, protein: 35, carbs: 40, fat: 42 } },
-        { id: '20', name: 'Pasta Carbonara', type: 'Dinner', macros: { calories: 720, protein: 28, carbs: 75, fat: 38 } },
-      ]
-    },
-    {
-      day: 'Sunday',
-      shortDay: 'Sun',
-      meals: [
-        { id: '21', name: 'Brunch Eggs Benedict', type: 'Breakfast', macros: { calories: 580, protein: 28, carbs: 35, fat: 38 } },
-        { id: '22', name: 'Roast Chicken', type: 'Dinner', macros: { calories: 700, protein: 55, carbs: 35, fat: 38 } },
-      ]
-    }
-  ]);
-  
+
   getMealIcon(type: string): string {
     const icons: Record<string, string> = {
-      'Breakfast': '🌅',
-      'Lunch': '☀️',
-      'Dinner': '🌙',
-      'Snack': '🍎'
+      'breakfast': '🌅',
+      'lunch': '☀️',
+      'dinner': '🌙',
+      'snack': '🍎'
     };
-    return icons[type] || '🍽️';
+    return icons[type.toLowerCase()] || '🍽️';
   }
-  
+
+  getMealTypeLabel(type: string): string {
+    const labels: Record<string, string> = {
+      'breakfast': 'Colazione',
+      'morning_snack': 'Spuntino mattina',
+      'lunch': 'Pranzo',
+      'afternoon_snack': 'Spuntino pomeriggio',
+      'dinner': 'Cena',
+    };
+    return labels[type] || type;
+  }
+
   getDayMacros(day: DayPlan): number {
     return day.meals.reduce((sum, m) => sum + m.macros.calories, 0);
+  }
+
+  isToday(dayName: string): boolean {
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    return dayName === today;
+  }
+
+  toggleMealExpand(mealId: string): void {
+    this.expandedMeals.update(set => {
+      const newSet = new Set(set);
+      if (newSet.has(mealId)) {
+        newSet.delete(mealId);
+      } else {
+        newSet.add(mealId);
+      }
+      return newSet;
+    });
+  }
+
+  clearPlan(): void {
+    if (confirm('Sei sicuro di voler eliminare la dieta?')) {
+      this.storage.clearAll();
+    }
+  }
+
+  async onFileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    this.errorMessage.set(null);
+
+    try {
+      // Parse using AI Vision
+      const parsed = await this.ocr.parseDietPlanFromImage(file);
+
+      // Convert to DietPlan format
+      const dietPlan = this.convertToDietPlan(parsed);
+
+      // Validate
+      if (dietPlan.days.length === 0) {
+        throw new Error('Non sono riuscito a estrarre pasti dalla foto. Prova con una foto più nitida.');
+      }
+
+      // Save to storage
+      this.storage.saveDietPlan(dietPlan);
+
+    } catch (error) {
+      console.error('OCR Error:', error);
+      this.errorMessage.set(
+        error instanceof Error ? error.message : 'Errore durante l\'analisi della foto'
+      );
+    }
+
+    // Reset input
+    input.value = '';
+  }
+
+  private convertToDietPlan(parsed: ParsedDietPlan): DietPlan {
+    const mapDisplayType = (type: string): 'breakfast' | 'lunch' | 'dinner' | 'snack' => {
+      switch (type) {
+        case 'breakfast': return 'breakfast';
+        case 'lunch': return 'lunch';
+        case 'dinner': return 'dinner';
+        default: return 'snack';
+      }
+    };
+
+    const mapDayName = (italian: string): string => {
+      const map: Record<string, string> = {
+        'Lunedì': 'Monday',
+        'Martedì': 'Tuesday',
+        'Mercoledì': 'Wednesday',
+        'Giovedì': 'Thursday',
+        'Venerdì': 'Friday',
+        'Sabato': 'Saturday',
+        'Domenica': 'Sunday',
+      };
+      return map[italian] || italian;
+    };
+
+    return {
+      id: crypto.randomUUID(),
+      name: parsed.planName || 'La Mia Dieta',
+      createdAt: new Date().toISOString(),
+      notes: parsed.notes,
+      weeklyTargets: parsed.weeklyTotals,
+      days: parsed.days.map(day => ({
+        day: mapDayName(day.day),
+        dayItalian: day.day,
+        meals: day.meals.map(meal => ({
+          id: crypto.randomUUID(),
+          name: this.getMealTypeLabel(meal.type),
+          type: meal.type as PlannedMeal['type'],
+          displayType: mapDisplayType(meal.type),
+          time: meal.time,
+          foods: meal.foods.map(f => ({
+            name: f.name,
+            quantity: f.quantity,
+            unit: f.unit,
+            isOptional: f.isOptional,
+            macros: f.macros,
+          })),
+          macros: meal.totalMacros,
+        })),
+      })),
+    };
   }
 }

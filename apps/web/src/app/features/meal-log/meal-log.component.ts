@@ -1,311 +1,373 @@
-import { Component, signal, computed, OnDestroy, inject } from '@angular/core';
+import { Component, signal, inject, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
+import { NgClass } from '@angular/common';
+import { StorageService, MealLog, PlannedMeal, DayPlan } from '../../core/services/storage.service';
 
-interface ParsedMeal {
+interface QuickMeal {
   name: string;
-  items: { name: string; quantity: string; macros: { calories: number; protein: number; carbs: number; fat: number } }[];
-  totalMacros: { calories: number; protein: number; carbs: number; fat: number };
-  confidence: number;
+  type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  macros: { calories: number; protein: number; carbs: number; fat: number };
 }
 
 @Component({
   selector: 'app-meal-log',
   standalone: true,
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, NgClass],
   template: `
-    <div class="max-w-2xl mx-auto space-y-6 animate-fade-in">
+    <div class="space-y-6 animate-fade-in">
       <!-- Header -->
-      <div class="flex items-center gap-4">
-        <button routerLink="/dashboard" class="p-2 hover:bg-gray-100 rounded-lg">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-        <h1 class="text-2xl font-bold text-gray-900">Log Meal</h1>
-      </div>
-      
-      <!-- Meal Type Selection -->
-      <div class="card">
-        <label class="label">Meal Type</label>
-        <div class="grid grid-cols-4 gap-2">
-          @for (type of mealTypes; track type.value) {
-            <button
-              (click)="selectedMealType.set(type.value)"
-              class="p-3 rounded-xl border-2 transition-colors text-center"
-              [class.border-primary-500]="selectedMealType() === type.value"
-              [class.bg-primary-50]="selectedMealType() === type.value"
-              [class.border-gray-200]="selectedMealType() !== type.value"
-            >
-              <span class="text-2xl">{{ type.icon }}</span>
-              <p class="text-sm mt-1" [class.text-primary-700]="selectedMealType() === type.value">{{ type.label }}</p>
-            </button>
-          }
+      <div class="flex justify-between items-center">
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900">Log Meal</h1>
+          <p class="text-gray-500">Track what you ate</p>
         </div>
       </div>
-      
-      <!-- Input Method -->
-      <div class="card">
-        <label class="label">How would you like to log?</label>
-        <div class="flex gap-2">
-          <button
-            (click)="inputMethod.set('text')"
-            class="flex-1 p-3 rounded-xl border-2 transition-colors flex items-center justify-center gap-2"
-            [class.border-primary-500]="inputMethod() === 'text'"
-            [class.bg-primary-50]="inputMethod() === 'text'"
-            [class.border-gray-200]="inputMethod() !== 'text'"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-            <span>Text</span>
-          </button>
-          <button
-            (click)="inputMethod.set('voice')"
-            class="flex-1 p-3 rounded-xl border-2 transition-colors flex items-center justify-center gap-2"
-            [class.border-primary-500]="inputMethod() === 'voice'"
-            [class.bg-primary-50]="inputMethod() === 'voice'"
-            [class.border-gray-200]="inputMethod() !== 'voice'"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-            </svg>
-            <span>Voice</span>
-          </button>
-        </div>
-      </div>
-      
-      <!-- Text Input -->
-      @if (inputMethod() === 'text') {
+
+      <!-- Quick Log from Diet Plan -->
+      @if (todayPlannedMeals().length > 0) {
         <div class="card">
-          <label class="label">What did you eat?</label>
-          <textarea
-            [(ngModel)]="mealInput"
-            placeholder="E.g., 2 eggs with toast and a glass of orange juice"
-            class="input min-h-[120px] resize-none"
-            (keydown.control.enter)="parseMeal()"
-          ></textarea>
-          <p class="text-xs text-gray-500 mt-2">Tip: Be specific with quantities for better macro estimates</p>
-        </div>
-      }
-      
-      <!-- Voice Input -->
-      @if (inputMethod() === 'voice') {
-        <div class="card">
-          <div class="text-center py-8">
-            @if (!isRecording()) {
-              <button
-                (click)="startRecording()"
-                class="w-20 h-20 bg-primary-500 rounded-full flex items-center justify-center mx-auto hover:bg-primary-600 transition-colors"
+          <h3 class="font-semibold text-gray-900 mb-4">📋 From Today's Plan</h3>
+          <p class="text-sm text-gray-500 mb-4">Tap a meal to log it as eaten</p>
+          
+          <div class="grid gap-3 sm:grid-cols-2">
+            @for (meal of todayPlannedMeals(); track meal.id) {
+              <button 
+                (click)="logPlannedMeal(meal)"
+                class="p-4 bg-gray-50 rounded-xl hover:bg-primary-50 hover:border-primary-300 border border-transparent transition-all text-left"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                </svg>
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="text-lg">{{ getMealIcon(meal.displayType) }}</span>
+                  <span class="text-xs text-gray-500 uppercase">{{ meal.displayType }}</span>
+                </div>
+                <h4 class="font-medium text-gray-900 text-sm">{{ meal.name }}</h4>
+                <div class="flex gap-2 mt-2 text-xs text-gray-500">
+                  <span>{{ meal.macros.calories }} kcal</span>
+                  <span>·</span>
+                  <span>{{ meal.macros.protein }}g P</span>
+                  <span>·</span>
+                  <span>{{ meal.macros.carbs }}g C</span>
+                  <span>·</span>
+                  <span>{{ meal.macros.fat }}g F</span>
+                </div>
               </button>
-              <p class="mt-4 text-gray-600">Tap to start recording</p>
-            } @else {
-              <button
-                (click)="stopRecording()"
-                class="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center mx-auto hover:bg-red-600 transition-colors relative"
-              >
-                <div class="absolute inset-0 bg-red-400 rounded-full animate-pulse-ring"></div>
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-white relative z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-                </svg>
-              </button>
-              <p class="mt-4 text-red-600 font-medium">Recording... Tap to stop</p>
-            }
-            
-            @if (voiceTranscript()) {
-              <div class="mt-6 p-4 bg-gray-50 rounded-xl text-left">
-                <p class="text-sm text-gray-500 mb-1">Transcription:</p>
-                <p class="text-gray-900">{{ voiceTranscript() }}</p>
-              </div>
             }
           </div>
         </div>
       }
-      
-      <!-- Parse Button -->
-      @if (mealInput() || voiceTranscript()) {
-        <button
-          (click)="parseMeal()"
-          [disabled]="isParsing()"
-          class="btn btn-primary w-full py-3"
-        >
-          @if (isParsing()) {
-            <svg class="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Analyzing...
-          } @else {
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-            </svg>
-            Analyze Meal
-          }
-        </button>
-      }
-      
-      <!-- Parsed Result Preview -->
-      @if (parsedMeal()) {
-        <div class="card border-2 border-primary-200 bg-primary-50">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="font-semibold text-gray-900">{{ parsedMeal()!.name }}</h3>
-            <span class="text-xs px-2 py-1 bg-primary-100 text-primary-700 rounded-full">
-              {{ Math.round(parsedMeal()!.confidence * 100) }}% confident
-            </span>
+
+      <!-- Manual Entry Form -->
+      <div class="card">
+        <h3 class="font-semibold text-gray-900 mb-4">✏️ Manual Entry</h3>
+        
+        <form (ngSubmit)="submitManualMeal()" class="space-y-4">
+          <!-- Meal Name -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Meal Name</label>
+            <input
+              type="text"
+              [(ngModel)]="manualMeal.name"
+              name="name"
+              class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              placeholder="e.g., Grilled Chicken Salad"
+              required
+            />
           </div>
-          
-          <!-- Items breakdown -->
-          <div class="space-y-2 mb-4">
-            @for (item of parsedMeal()!.items; track item.name) {
-              <div class="flex justify-between text-sm">
-                <span class="text-gray-700">{{ item.name }} ({{ item.quantity }})</span>
-                <span class="text-gray-500">{{ item.macros.calories }} kcal</span>
-              </div>
-            }
-          </div>
-          
-          <!-- Total macros -->
-          <div class="border-t border-primary-200 pt-4">
-            <div class="grid grid-cols-4 gap-4 text-center">
-              <div>
-                <p class="text-2xl font-bold text-amber-600">{{ parsedMeal()!.totalMacros.calories }}</p>
-                <p class="text-xs text-gray-500">kcal</p>
-              </div>
-              <div>
-                <p class="text-2xl font-bold text-red-500">{{ parsedMeal()!.totalMacros.protein }}g</p>
-                <p class="text-xs text-gray-500">protein</p>
-              </div>
-              <div>
-                <p class="text-2xl font-bold text-blue-500">{{ parsedMeal()!.totalMacros.carbs }}g</p>
-                <p class="text-xs text-gray-500">carbs</p>
-              </div>
-              <div>
-                <p class="text-2xl font-bold text-yellow-600">{{ parsedMeal()!.totalMacros.fat }}g</p>
-                <p class="text-xs text-gray-500">fat</p>
-              </div>
+
+          <!-- Meal Type -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Type</label>
+            <div class="grid grid-cols-4 gap-2">
+              @for (type of mealTypes; track type.value) {
+                <button
+                  type="button"
+                  (click)="manualMeal.type = type.value"
+                  class="p-3 rounded-xl border-2 transition-all text-center"
+                  [ngClass]="{
+                    'border-primary-500 bg-primary-50 text-primary-700': manualMeal.type === type.value,
+                    'border-gray-200 hover:border-gray-300': manualMeal.type !== type.value
+                  }"
+                >
+                  <span class="text-xl">{{ type.icon }}</span>
+                  <p class="text-xs mt-1">{{ type.label }}</p>
+                </button>
+              }
             </div>
           </div>
-          
-          <!-- Actions -->
-          <div class="flex gap-3 mt-6">
-            <button (click)="editMeal()" class="btn btn-outline flex-1">
-              Edit
+
+          <!-- Macros Grid -->
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Calories</label>
+              <input
+                type="number"
+                [(ngModel)]="manualMeal.calories"
+                name="calories"
+                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="0"
+                min="0"
+                required
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Protein (g)</label>
+              <input
+                type="number"
+                [(ngModel)]="manualMeal.protein"
+                name="protein"
+                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="0"
+                min="0"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Carbs (g)</label>
+              <input
+                type="number"
+                [(ngModel)]="manualMeal.carbs"
+                name="carbs"
+                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="0"
+                min="0"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Fat (g)</label>
+              <input
+                type="number"
+                [(ngModel)]="manualMeal.fat"
+                name="fat"
+                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="0"
+                min="0"
+              />
+            </div>
+          </div>
+
+          <!-- Voice Input (if supported) -->
+          @if (voiceSupported) {
+            <button
+              type="button"
+              (click)="startVoiceInput()"
+              class="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:border-primary-300 hover:text-primary-600 transition-colors flex items-center justify-center gap-2"
+              [ngClass]="{ 'border-red-300 bg-red-50 text-red-600': isListening() }"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+              </svg>
+              {{ isListening() ? 'Listening...' : 'Voice Input' }}
             </button>
-            <button (click)="saveMeal()" class="btn btn-primary flex-1">
-              Save Meal
-            </button>
+          }
+
+          <button
+            type="submit"
+            class="w-full btn btn-primary py-3"
+            [disabled]="!manualMeal.name || !manualMeal.calories"
+          >
+            Log Meal
+          </button>
+        </form>
+      </div>
+
+      <!-- Recent Meals -->
+      @if (recentMeals().length > 0) {
+        <div class="card">
+          <h3 class="font-semibold text-gray-900 mb-4">⏱️ Recent (Tap to log again)</h3>
+          <div class="space-y-2">
+            @for (meal of recentMeals(); track $index) {
+              <button 
+                (click)="logQuickMeal(meal)"
+                class="w-full p-3 bg-gray-50 rounded-xl hover:bg-primary-50 transition-colors text-left flex items-center justify-between"
+              >
+                <div class="flex items-center gap-3">
+                  <span>{{ getMealIcon(meal.type) }}</span>
+                  <div>
+                    <p class="font-medium text-gray-900 text-sm">{{ meal.name }}</p>
+                    <p class="text-xs text-gray-500">{{ meal.macros.calories }} kcal</p>
+                  </div>
+                </div>
+                <span class="text-primary-600">+</span>
+              </button>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- Success Toast -->
+      @if (showSuccess()) {
+        <div class="fixed bottom-24 left-4 right-4 bg-green-600 text-white p-4 rounded-xl shadow-lg animate-fade-in z-50">
+          <div class="flex items-center gap-3">
+            <span class="text-xl">✅</span>
+            <div>
+              <p class="font-medium">Meal logged!</p>
+              <p class="text-sm text-green-100">{{ lastLoggedMeal() }}</p>
+            </div>
           </div>
         </div>
       }
     </div>
   `
 })
-export class MealLogComponent implements OnDestroy {
-  private router = inject(Router);
-  private recognition: any;
-  
+export class MealLogComponent {
+  private storage = inject(StorageService);
+
   mealTypes = [
-    { value: 'breakfast', label: 'Breakfast', icon: '🌅' },
-    { value: 'lunch', label: 'Lunch', icon: '☀️' },
-    { value: 'dinner', label: 'Dinner', icon: '🌙' },
-    { value: 'snack', label: 'Snack', icon: '🍎' }
+    { value: 'breakfast' as const, label: 'Breakfast', icon: '🌅' },
+    { value: 'lunch' as const, label: 'Lunch', icon: '☀️' },
+    { value: 'dinner' as const, label: 'Dinner', icon: '🌙' },
+    { value: 'snack' as const, label: 'Snack', icon: '🍎' },
   ];
-  
-  selectedMealType = signal('lunch');
-  inputMethod = signal<'text' | 'voice'>('text');
-  mealInput = signal('');
-  voiceTranscript = signal('');
-  isRecording = signal(false);
-  isParsing = signal(false);
-  parsedMeal = signal<ParsedMeal | null>(null);
-  
-  Math = Math; // Expose Math to template
-  
-  constructor() {
-    this.initSpeechRecognition();
-  }
-  
-  private initSpeechRecognition() {
-    if ('webkitSpeechRecognition' in window) {
-      this.recognition = new (window as any).webkitSpeechRecognition();
-      this.recognition.continuous = false;
-      this.recognition.interimResults = true;
-      this.recognition.lang = 'en-US';
-      
-      this.recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        this.voiceTranscript.set(transcript);
-      };
-      
-      this.recognition.onend = () => {
-        this.isRecording.set(false);
-      };
-    }
-  }
-  
-  startRecording() {
-    if (this.recognition) {
-      this.voiceTranscript.set('');
-      this.isRecording.set(true);
-      this.recognition.start();
-    } else {
-      alert('Speech recognition is not supported in your browser');
-    }
-  }
-  
-  stopRecording() {
-    if (this.recognition) {
-      this.recognition.stop();
-    }
-  }
-  
-  async parseMeal() {
-    const input = this.inputMethod() === 'text' ? this.mealInput() : this.voiceTranscript();
-    if (!input) return;
+
+  manualMeal = {
+    name: '',
+    type: 'lunch' as 'breakfast' | 'lunch' | 'dinner' | 'snack',
+    calories: 0,
+    protein: 0,
+    carbs: 0,
+    fat: 0,
+  };
+
+  isListening = signal(false);
+  showSuccess = signal(false);
+  lastLoggedMeal = signal('');
+  voiceSupported = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+
+  // Get planned meals for today
+  todayPlannedMeals = computed(() => {
+    const plan = this.storage.dietPlan();
+    if (!plan) return [];
     
-    this.isParsing.set(true);
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    const dayPlan = plan.days.find(d => d.day === today);
     
-    // Simulate API call - will be replaced with real API
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    return dayPlan?.meals || [];
+  });
+
+  // Get unique recent meals (last 7 days, deduplicated by name)
+  recentMeals = computed((): QuickMeal[] => {
+    const logs = this.storage.mealLogs();
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     
-    // Mock parsed result
-    this.parsedMeal.set({
-      name: this.getMealName(input),
-      items: [
-        { name: 'Eggs', quantity: '2 large', macros: { calories: 156, protein: 12, carbs: 1, fat: 11 } },
-        { name: 'Toast', quantity: '2 slices', macros: { calories: 150, protein: 5, carbs: 28, fat: 2 } },
-        { name: 'Orange Juice', quantity: '250ml', macros: { calories: 112, protein: 2, carbs: 26, fat: 0 } }
-      ],
-      totalMacros: { calories: 418, protein: 19, carbs: 55, fat: 13 },
-      confidence: 0.87
+    const recent = logs
+      .filter(l => l.timestamp > sevenDaysAgo)
+      .reduce((acc, log) => {
+        if (!acc.find(m => m.name.toLowerCase() === log.name.toLowerCase())) {
+          acc.push({
+            name: log.name,
+            type: log.type,
+            macros: log.macros
+          });
+        }
+        return acc;
+      }, [] as QuickMeal[])
+      .slice(0, 5);
+    
+    return recent;
+  });
+
+  getMealIcon(type: string): string {
+    const icons: Record<string, string> = {
+      'breakfast': '🌅',
+      'lunch': '☀️',
+      'dinner': '🌙',
+      'snack': '🍎'
+    };
+    return icons[type.toLowerCase()] || '🍽️';
+  }
+
+  logPlannedMeal(meal: PlannedMeal): void {
+    const today = new Date().toISOString().split('T')[0];
+    
+    this.storage.logMeal({
+      date: today,
+      plannedMealId: meal.id,
+      name: meal.name,
+      type: meal.displayType, // Use displayType for log compatibility
+      macros: meal.macros,
     });
     
-    this.isParsing.set(false);
+    this.showSuccessMessage(`${meal.name} - ${meal.macros.calories} kcal`);
   }
-  
-  private getMealName(input: string): string {
-    // Simple logic to generate meal name from input
-    const words = input.toLowerCase().split(' ').slice(0, 4);
-    return words.map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+  logQuickMeal(meal: QuickMeal): void {
+    const today = new Date().toISOString().split('T')[0];
+    
+    this.storage.logMeal({
+      date: today,
+      name: meal.name,
+      type: meal.type,
+      macros: meal.macros,
+    });
+    
+    this.showSuccessMessage(`${meal.name} - ${meal.macros.calories} kcal`);
   }
-  
-  editMeal() {
-    // TODO: Open edit modal
+
+  submitManualMeal(): void {
+    if (!this.manualMeal.name || !this.manualMeal.calories) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    this.storage.logMeal({
+      date: today,
+      name: this.manualMeal.name,
+      type: this.manualMeal.type,
+      macros: {
+        calories: this.manualMeal.calories || 0,
+        protein: this.manualMeal.protein || 0,
+        carbs: this.manualMeal.carbs || 0,
+        fat: this.manualMeal.fat || 0,
+      },
+    });
+    
+    this.showSuccessMessage(`${this.manualMeal.name} - ${this.manualMeal.calories} kcal`);
+    
+    // Reset form
+    this.manualMeal = {
+      name: '',
+      type: 'lunch',
+      calories: 0,
+      protein: 0,
+      carbs: 0,
+      fat: 0,
+    };
   }
-  
-  saveMeal() {
-    // TODO: Save to API
-    this.router.navigate(['/dashboard']);
+
+  startVoiceInput(): void {
+    if (!this.voiceSupported) return;
+    
+    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+    const recognition = new SpeechRecognition();
+    
+    recognition.lang = 'en-US';
+    recognition.interimResults = false;
+    
+    recognition.onstart = () => {
+      this.isListening.set(true);
+    };
+    
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      this.manualMeal.name = transcript;
+      this.isListening.set(false);
+    };
+    
+    recognition.onerror = () => {
+      this.isListening.set(false);
+    };
+    
+    recognition.onend = () => {
+      this.isListening.set(false);
+    };
+    
+    recognition.start();
   }
-  
-  ngOnDestroy() {
-    if (this.recognition) {
-      this.recognition.stop();
-    }
+
+  private showSuccessMessage(text: string): void {
+    this.lastLoggedMeal.set(text);
+    this.showSuccess.set(true);
+    
+    setTimeout(() => {
+      this.showSuccess.set(false);
+    }, 2500);
   }
 }

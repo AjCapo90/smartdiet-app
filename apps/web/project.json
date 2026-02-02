@@ -18,9 +18,17 @@
           {
             "glob": "**/*",
             "input": "apps/web/public"
-          }
+          },
+          {
+            "glob": "**/*",
+            "input": "apps/web/src/assets",
+            "output": "assets"
+          },
+          "apps/web/src/manifest.webmanifest",
+          "apps/web/src/_redirects"
         ],
-        "styles": ["apps/web/src/styles.scss"]
+        "styles": ["apps/web/src/styles.scss"],
+        "serviceWorker": "apps/web/ngsw-config.json"
       },
       "configurations": {
         "production": {
@@ -28,12 +36,12 @@
             {
               "type": "initial",
               "maximumWarning": "500kb",
-              "maximumError": "1mb"
+              "maximumError": "2mb"
             },
             {
               "type": "anyComponentStyle",
-              "maximumWarning": "4kb",
-              "maximumError": "8kb"
+              "maximumWarning": "6kb",
+              "maximumError": "10kb"
             }
           ],
           "outputHashing": "all"
