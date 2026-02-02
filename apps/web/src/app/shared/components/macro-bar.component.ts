@@ -8,7 +8,7 @@ import { Component, Input, computed } from '@angular/core';
       <div class="flex justify-between text-sm">
         <span class="font-medium" [class]="labelClass()">{{ label }}</span>
         <div class="flex items-center gap-2">
-          <span class="text-gray-600">{{ current }} / {{ target }} {{ unit }}</span>
+          <span class="text-gray-600">{{ roundValue(current) }} / {{ roundValue(target) }} {{ unit }}</span>
           @if (delta !== undefined) {
             <span 
               class="text-xs px-1.5 py-0.5 rounded-full font-medium"
@@ -66,8 +66,9 @@ export class MacroBarComponent {
   
   deltaText = computed(() => {
     if (this.delta === undefined) return '';
-    if (this.delta > 0) return `+${this.delta}`;
-    if (this.delta < 0) return `${this.delta}`;
+    const rounded = Math.round(this.delta * 10) / 10;
+    if (rounded > 0) return `+${rounded}`;
+    if (rounded < 0) return `${rounded}`;
     return '0';
   });
   
@@ -76,5 +77,9 @@ export class MacroBarComponent {
     if (this.delta > 0) return 'bg-red-100 text-red-700';
     if (this.delta < 0) return 'bg-green-100 text-green-700';
     return 'bg-gray-100 text-gray-700';
+  }
+
+  roundValue(value: number): number {
+    return Math.round(value * 10) / 10;
   }
 }

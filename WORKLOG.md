@@ -1,55 +1,103 @@
-# Calo - Work Log
+# Calo - Work Log Notturno
 
-## Sessione: 2026-02-02 23:00
+## Obiettivo
+Creare un'app di tracking dieta **incredibile e user-friendly** mentre Alessandro dorme (5 ore di lavoro autonomo).
 
-### ✅ Completato
+## Flusso Utente Completo
 
-1. **Bug critico risolto: Nutrition API**
-   - OpenFoodFacts restituiva prodotti sbagliati (pollo=5kcal!)
-   - Aggiunto database locale 100+ alimenti italiani server-side
-   - Conversione intelligente "pz" con serving sizes corretti
-   - Commit: `d9d577e`
+```
+1. UPLOAD DIETA (✅ fatto)
+   └── Foto → OCR → Preview → Verify → Save
 
-2. **Test API verificati:**
-   - Pollo 100g: 165 kcal ✅
-   - Riso 80g: 104 kcal ✅
-   - Uova 2pz: 155 kcal ✅ (2×50g)
-   - Banana 1pz: 107 kcal ✅ (120g)
-   - Avena 40g: 156 kcal ✅
-   - Tonno scatoletta: 158 kcal ✅
-   - Tutti con source: "local", confidence: "high"
+2. DASHBOARD (da migliorare)
+   ├── Today's Progress (planned vs actual)
+   ├── Quick Log buttons
+   ├── Week overview
+   └── Insights/Tips
 
-### 🔄 In Progress
+3. LOG PASTO (da costruire meglio)
+   ├── Selezione veloce da piano
+   ├── Porzione effettiva (slider?)
+   ├── Aggiungi extra
+   └── Conferma
 
-1. **Test visivo flusso completo** - In attesa browser access
-2. **Test parsing OCR** - Da verificare con immagine reale
+4. TRACKING (da costruire)
+   ├── % completamento giornaliero
+   ├── Streak giorni consecutivi
+   ├── Trend settimanale
+   └── Notifiche smart
 
-### 📋 Da Fare
+5. SUGGESTIONS (da costruire)
+   ├── Cosa mangiare ora?
+   ├── Macro mancanti
+   └── Swap suggestions
+```
 
-1. [ ] Test upload immagine piano alimentare
-2. [ ] Verificare parsing tutti 7 giorni / 5 pasti
-3. [ ] Verificare ordinamento giorni (Lun→Dom)
-4. [ ] Test preview UI - editing alimenti
-5. [ ] Test verify UI - calcolo kcal
-6. [ ] Test salvataggio piano
-7. [ ] Screenshot intero flusso
-8. [ ] Aggiungere varianti "light" al DB locale
+## Sprint Plan
 
-### 🐛 Bug Trovati & Risolti
+### Sprint 1: Foundation (23:30 - 00:00)
+- [x] Salva piano test
+- [x] Verifica dashboard con dati
+- [ ] Review architettura storage
+- [ ] Plan meal logging UX
 
-| Bug | Stato | Fix |
-|-----|-------|-----|
-| OpenFoodFacts match prodotti sbagliati | ✅ Fixed | Database locale first |
-| "pz" = 100g sempre | ✅ Fixed | Serving sizes per alimento |
-| Solo colazione estratta | Da testare | Prompt GPT aggiornato |
-| Giorni partono da Giovedì | Da testare | Sorting aggiunto |
+### Sprint 2: Meal Logging (00:00 - 00:30)
+- [ ] Quick-log da piano del giorno
+- [ ] Slider porzione (50%, 100%, 150%)
+- [ ] "Ho mangiato qualcosa di diverso"
+- [ ] Conferma rapida
 
-### 💡 Miglioramenti Proposti
+### Sprint 3: Progress Tracking (00:30 - 01:00)
+- [ ] Barra progresso animata
+- [ ] Macro remaining display
+- [ ] Meal checkmarks
+- [ ] Daily summary card
 
-1. **Varianti "light"** - philadelphia light, yogurt light, etc.
-2. **Marca-aware** - riconoscere brand (Müller, Fage, etc.)
-3. **Cache risultati** - evitare API calls duplicate
+### Sprint 4: Polish & Bugs (01:00 - 01:30)
+- [ ] Fix "1g nocchi" → "gnocchi"
+- [ ] Empty days handling
+- [ ] Loading states
+- [ ] Error messages migliori
+
+### Sprint 5: Smart Features (01:30 - 02:00)
+- [ ] "Prossimo pasto" suggestion
+- [ ] Swap alternatives
+- [ ] Streak counter
+- [ ] Achievement badges?
+
+### Sprint 6: Testing & Refinement (02:00 - 04:00)
+- [ ] Full flow test
+- [ ] Mobile responsiveness
+- [ ] Edge cases
+- [ ] Performance
+
+## Technical Notes
+
+### Storage Structure
+```typescript
+// localStorage keys
+- 'calo_diet_plan' → DietPlan object
+- 'calo_meal_logs' → MealLog[] array  
+- 'calo_settings' → UserSettings
+```
+
+### Key Files
+- `storage.service.ts` - Data persistence
+- `diet-plan.component.ts` - Plan display
+- `log-meal.component.ts` - Meal logging (needs work)
+- `dashboard.component.ts` - Main view
+
+## Ideas (Think Outside Box)
+1. **Photo log** - Scatta foto del piatto, AI verifica
+2. **Voice log** - "Ho mangiato pasta con pollo"
+3. **Widget** - Quick-log senza aprire app
+4. **Gamification** - Punti, livelli, achievements
+5. **Social** - Condividi progress con nutrizionista
+6. **Smart reminders** - "È ora di pranzo, oggi hai: ..."
+
+## Progress Updates
+- 23:30 - Inizio lavoro notturno
+- ...to be updated...
 
 ---
-
-*Prossimo step: browser access per test visivo completo*
+*Alessandro torna alle ~04:30*

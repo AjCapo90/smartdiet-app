@@ -310,8 +310,9 @@ export class DashboardComponent {
   }
 
   formatDelta(delta: number): string {
-    if (delta === 0) return '0';
-    return delta > 0 ? `+${delta}` : `${delta}`;
+    const rounded = Math.round(delta * 10) / 10; // Round to 1 decimal
+    if (rounded === 0) return '0';
+    return rounded > 0 ? `+${rounded}` : `${rounded}`;
   }
 
   getMealIcon(type: string): string {
