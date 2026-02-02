@@ -64,21 +64,20 @@ export class OcrService {
 
     try {
       this.progress.set(10);
-      this.status.set('Preparazione upload...');
+      this.status.set('Lettura immagine...');
       
-      // Skip compression - send original file directly
-      const formData = new FormData();
-      formData.append('image', imageFile);
-      
-      console.log('Uploading original file:', imageFile.name, (imageFile.size/1024).toFixed(0), 'KB');
-      
-      console.log('Uploading file:', imageFile.name, (imageFile.size / 1024).toFixed(0), 'KB');
+      // Read file as base64 (most compatible method for iOS)
+      const base64 = await this.fileToBase64(imageFile);
+      console.log('Image read:', (imageFile.size/1024).toFixed(0), 'KB ->', (base64.length/1024).toFixed(0), 'KB base64');
       
       this.status.set('Invio all\'AI per analisi...');
       this.progress.set(30);
 
-      // Use XMLHttpRequest for better Safari iOS compatibility
-      const response = await this.uploadWithXHR(this.API_URL, formData);
+      // Send as JSON using XMLHttpRequest (Safari compatible)
+      const response = await this.sendJSONWithXHR(this.API_URL, {
+        image: base64,
+        mimeType: imageFile.type || 'image/jpeg'
+      });
 
       this.progress.set(80);
       this.status.set('Elaborazione risposta...');
@@ -141,11 +140,12 @@ export class OcrService {
     });
   }
 
-  // XMLHttpRequest upload - more stable on Safari iOS
-  private uploadWithXHR(url: string, formData: FormData): Promise<Response> {
+  // Send JSON using XMLHttpRequest - most compatible with Safari iOS
+  private sendJSONWithXHR(url: string, data: object): Promise<Response> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', url, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
       xhr.timeout = 120000; // 2 minutes
       
       xhr.onload = () => {
@@ -158,11 +158,12 @@ export class OcrService {
       };
       
       xhr.onerror = () => {
-        reject(new Error('Errore di rete durante l\'upload'));
+        console.error('XHR error:', xhr.status, xhr.statusText);
+        reject(new Error('Errore di rete. Riprova.'));
       };
       
       xhr.ontimeout = () => {
-        reject(new Error('Timeout: l\'upload ha impiegato troppo tempo'));
+        reject(new Error('Timeout: l\'analisi sta impiegando troppo tempo'));
       };
       
       xhr.upload.onprogress = (e) => {
@@ -172,7 +173,11 @@ export class OcrService {
         }
       };
       
-      xhr.send(formData);
+      try {
+        xhr.send(JSON.stringify(data));
+      } catch (e) {
+        reject(new Error('Errore nella preparazione dei dati'));
+      }
     });
   }
 

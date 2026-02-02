@@ -30,8 +30,7 @@ import { StorageService, DietPlan, DayPlan, PlannedMeal, FoodItem } from '../../
             📷 Carica Foto
             <input 
               type="file" 
-              accept="image/*" 
-              capture="environment"
+              accept="image/*"
               class="hidden" 
               (change)="onFileSelected($event)"
             />
@@ -87,7 +86,7 @@ import { StorageService, DietPlan, DayPlan, PlannedMeal, FoodItem } from '../../
           </p>
           <label class="btn btn-primary cursor-pointer inline-flex">
             📷 Scatta Foto Dieta
-            <input type="file" accept="image/*" capture="environment" class="hidden" (change)="onFileSelected($event)" />
+            <input type="file" accept="image/*" class="hidden" (change)="onFileSelected($event)" />
           </label>
         </div>
       }
