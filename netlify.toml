@@ -7,6 +7,11 @@
   directory = "apps/web/netlify/functions"
   node_bundler = "esbuild"
 
+[functions."parse-diet"]
+  # Max timeout for free tier is 26 seconds
+  # For paid plans can go up to 15 minutes
+  timeout = 26
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
