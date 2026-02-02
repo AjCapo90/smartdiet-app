@@ -63,10 +63,10 @@ export class OcrService {
     this.lastError.set(null);
 
     try {
-      // Resize image if needed (max 1200px, quality 80%)
+      // Resize image if needed (max 1000px for optimal OCR)
       this.progress.set(5);
       this.status.set('Ottimizzazione immagine...');
-      const optimizedFile = await this.resizeImage(imageFile, 1200, 0.8);
+      const optimizedFile = await this.resizeImage(imageFile, 1000, 0.85);
       
       console.log(`Image optimized: ${(imageFile.size / 1024).toFixed(0)}KB -> ${(optimizedFile.size / 1024).toFixed(0)}KB`);
 
@@ -138,7 +138,10 @@ export class OcrService {
       this.status.set('Completato!');
 
       console.log('Parse successful, provider:', result.provider);
-      return result.data as ParsedDietPlan;
+      
+      // Normalize compact format to full format
+      const normalized = this.normalizeData(result.data);
+      return normalized as ParsedDietPlan;
 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Errore sconosciuto';
@@ -261,5 +264,53 @@ export class OcrService {
       'dinner': 'Cena',
     };
     return labels[type] || type;
+  }
+
+  // Normalize compact API format to full format
+  private normalizeData(data: any): ParsedDietPlan {
+    const dayMap: Record<string, string> = {
+      'Lun': 'Lunedì', 'Mar': 'Martedì', 'Mer': 'Mercoledì',
+      'Gio': 'Giovedì', 'Ven': 'Venerdì', 'Sab': 'Sabato', 'Dom': 'Domenica'
+    };
+    
+    const typeMap: Record<string, ParsedMeal['type']> = {
+      'b': 'breakfast', 's': 'morning_snack', 'l': 'lunch', 
+      'sp': 'afternoon_snack', 'd': 'dinner'
+    };
+
+    const days: ParsedDayPlan[] = (data.days || []).map((day: any) => ({
+      day: dayMap[day.day] || day.day,
+      meals: (day.meals || []).map((meal: any) => {
+        const mealType = typeMap[meal.t] || meal.type || meal.t;
+        const foods: FoodItem[] = (meal.f || meal.foods || []).map((food: any) => {
+          if (typeof food === 'string') {
+            // Parse "40g avena" format
+            const match = food.match(/^(\d+)?\s*(g|ml|pz|fette?|scatolett[ae]?)?\s*(.+)$/i);
+            if (match) {
+              return {
+                name: match[3]?.trim() || food,
+                quantity: parseInt(match[1]) || 1,
+                unit: match[2] || 'pz',
+                macros: { calories: 0, protein: 0, carbs: 0, fat: 0 }
+              };
+            }
+            return { name: food, quantity: 1, unit: 'pz', macros: { calories: 0, protein: 0, carbs: 0, fat: 0 } };
+          }
+          return food;
+        });
+        
+        return {
+          type: mealType,
+          time: meal.time,
+          foods,
+          totalMacros: { calories: 0, protein: 0, carbs: 0, fat: 0 }
+        };
+      })
+    }));
+
+    return {
+      days,
+      weeklyTotals: { calories: 0, protein: 0, carbs: 0, fat: 0 }
+    };
   }
 }
