@@ -102,7 +102,7 @@ export default async function handler(req: Request, context: Context) {
     }
 
     // Debug: return OCR text if requested
-    if (body.ocrOnly) {
+    if (ocrOnly) {
       return new Response(JSON.stringify({
         success: true,
         ocrText: ocrText.substring(0, 2000),
