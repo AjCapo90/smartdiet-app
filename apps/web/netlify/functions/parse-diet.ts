@@ -1,31 +1,9 @@
 import type { Context } from '@netlify/functions';
 
-// Prompt più conciso per risposte più veloci
-const PROMPT = `Analizza questa dieta settimanale italiana. Estrai i dati in JSON:
-
-{
-  "planName": "nome piano",
-  "days": [
-    {
-      "day": "Lunedì",
-      "meals": [
-        {
-          "type": "breakfast|morning_snack|lunch|afternoon_snack|dinner",
-          "time": "8:30",
-          "foods": [{"name": "alimento", "quantity": 100, "unit": "g", "macros": {"calories": 100, "protein": 10, "carbs": 20, "fat": 5}}],
-          "totalMacros": {"calories": 0, "protein": 0, "carbs": 0, "fat": 0}
-        }
-      ]
-    }
-  ],
-  "weeklyTotals": {"calories": 0, "protein": 0, "carbs": 0, "fat": 0},
-  "notes": []
-}
-
-Regole:
-- "ev." = opzionale (isOptional: true)
-- Stima macro realistici per ogni alimento
-- Rispondi SOLO con JSON valido`;
+// Prompt ultra-conciso
+const PROMPT = `Estrai la dieta dalla foto in JSON. Formato:
+{"days":[{"day":"Lunedì","meals":[{"type":"breakfast","foods":[{"name":"cibo","qty":100,"unit":"g"}]}]}]}
+type: breakfast/morning_snack/lunch/afternoon_snack/dinner. Solo JSON, niente altro.`;
 
 export default async function handler(req: Request, context: Context) {
   const headers = {
