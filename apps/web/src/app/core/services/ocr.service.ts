@@ -464,8 +464,12 @@ export class OcrService {
     };
     
     const typeMap: Record<string, ParsedMeal['type']> = {
-      'b': 'breakfast', 's': 'morning_snack', 'l': 'lunch', 
-      'sp': 'afternoon_snack', 'd': 'dinner'
+      'b': 'breakfast', 
+      's': 'morning_snack', 
+      'sm': 'morning_snack',  // Added: explicit morning snack
+      'l': 'lunch', 
+      'sp': 'afternoon_snack', 
+      'd': 'dinner'
     };
 
     const days: ParsedDayPlan[] = (data.days || []).map((day: any) => ({
