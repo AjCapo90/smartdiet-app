@@ -1,9 +1,10 @@
 [build]
-  command = "nx run web:build"
+  base = "."
   publish = "dist/apps/web/browser"
+  command = "npx nx run web:build"
 
 [functions]
-  directory = "netlify/functions"
+  directory = "apps/web/netlify/functions"
   node_bundler = "esbuild"
 
 [[redirects]]
