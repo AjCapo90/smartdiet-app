@@ -14,8 +14,8 @@ import { StorageService } from '../../core/services/storage.service';
       <!-- Header with Delta Badge -->
       <div class="flex justify-between items-start">
         <div>
-          <h1 class="text-2xl font-bold text-gray-900">Today's Progress</h1>
-          <p class="text-gray-500">{{ todayDate }}</p>
+          <h1 class="text-2xl font-bold text-gray-900">Progresso di Oggi</h1>
+          <p class="text-gray-500 capitalize">{{ todayDate }}</p>
         </div>
         
         <!-- Quick Delta Badge -->
@@ -44,7 +44,7 @@ import { StorageService } from '../../core/services/storage.service';
           <!-- Macro Bars -->
           <div class="flex-grow w-full space-y-4">
             <app-macro-bar
-              [label]="'Protein'"
+              [label]="'Proteine'"
               [current]="storage.todayMacros().protein"
               [target]="storage.todayPlanned().protein"
               [unit]="'g'"
@@ -52,7 +52,7 @@ import { StorageService } from '../../core/services/storage.service';
               [delta]="storage.todayDelta().protein"
             />
             <app-macro-bar
-              [label]="'Carbs'"
+              [label]="'Carboidrati'"
               [current]="storage.todayMacros().carbs"
               [target]="storage.todayPlanned().carbs"
               [unit]="'g'"
@@ -60,7 +60,7 @@ import { StorageService } from '../../core/services/storage.service';
               [delta]="storage.todayDelta().carbs"
             />
             <app-macro-bar
-              [label]="'Fat'"
+              [label]="'Grassi'"
               [current]="storage.todayMacros().fat"
               [target]="storage.todayPlanned().fat"
               [unit]="'g'"
@@ -71,12 +71,46 @@ import { StorageService } from '../../core/services/storage.service';
         </div>
       </div>
 
+      <!-- Next Meal Suggestion -->
+      @if (nextMeal()) {
+        <a routerLink="/log" class="card bg-gradient-to-br from-primary-50 to-primary-100 border border-primary-200 hover:shadow-lg transition-shadow block">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+              <div class="w-14 h-14 bg-white rounded-xl flex items-center justify-center shadow-sm">
+                <span class="text-2xl">{{ getMealIcon(nextMeal()!.displayType) }}</span>
+              </div>
+              <div>
+                <p class="text-xs text-primary-600 font-medium uppercase">Prossimo pasto</p>
+                <h3 class="font-semibold text-gray-900">{{ nextMeal()!.name }}</h3>
+                <p class="text-sm text-gray-600">{{ nextMeal()!.macros.calories }} kcal</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <p class="text-sm text-primary-600 font-medium">{{ loggedMealsCount().logged }}/{{ loggedMealsCount().total }}</p>
+              <p class="text-xs text-gray-500">pasti loggati</p>
+            </div>
+          </div>
+        </a>
+      } @else if (storage.dietPlan() && loggedMealsCount().logged === loggedMealsCount().total && loggedMealsCount().total > 0) {
+        <div class="card bg-gradient-to-br from-green-50 to-green-100 border border-green-200">
+          <div class="flex items-center gap-4">
+            <div class="w-14 h-14 bg-white rounded-xl flex items-center justify-center shadow-sm">
+              <span class="text-2xl">🎉</span>
+            </div>
+            <div>
+              <h3 class="font-semibold text-green-800">Tutti i pasti completati!</h3>
+              <p class="text-sm text-green-700">Hai seguito il piano di oggi. Ottimo lavoro!</p>
+            </div>
+          </div>
+        </div>
+      }
+
       <!-- Delta Card (Always Visible) -->
       <div class="card bg-gradient-to-br from-gray-50 to-gray-100">
-        <h3 class="font-semibold text-gray-900 mb-4">📊 Planned vs Actual (Today)</h3>
+        <h3 class="font-semibold text-gray-900 mb-4">📊 Pianificato vs Reale (Oggi)</h3>
         <div class="grid grid-cols-4 gap-3">
           <div class="text-center">
-            <p class="text-xs text-gray-500 mb-1">Calories</p>
+            <p class="text-xs text-gray-500 mb-1">Calorie</p>
             <p 
               class="text-lg font-bold"
               [ngClass]="getDeltaClass(storage.todayDelta().calories)"
@@ -85,7 +119,7 @@ import { StorageService } from '../../core/services/storage.service';
             </p>
           </div>
           <div class="text-center">
-            <p class="text-xs text-gray-500 mb-1">Protein</p>
+            <p class="text-xs text-gray-500 mb-1">Proteine</p>
             <p 
               class="text-lg font-bold"
               [ngClass]="getDeltaClass(storage.todayDelta().protein)"
@@ -94,7 +128,7 @@ import { StorageService } from '../../core/services/storage.service';
             </p>
           </div>
           <div class="text-center">
-            <p class="text-xs text-gray-500 mb-1">Carbs</p>
+            <p class="text-xs text-gray-500 mb-1">Carbo</p>
             <p 
               class="text-lg font-bold"
               [ngClass]="getDeltaClass(storage.todayDelta().carbs)"
@@ -103,7 +137,7 @@ import { StorageService } from '../../core/services/storage.service';
             </p>
           </div>
           <div class="text-center">
-            <p class="text-xs text-gray-500 mb-1">Fat</p>
+            <p class="text-xs text-gray-500 mb-1">Grassi</p>
             <p 
               class="text-lg font-bold"
               [ngClass]="getDeltaClass(storage.todayDelta().fat)"
@@ -117,9 +151,9 @@ import { StorageService } from '../../core/services/storage.service';
       <!-- Weekly Overview -->
       <div class="card">
         <div class="flex justify-between items-center mb-4">
-          <h3 class="font-semibold text-gray-900">This Week</h3>
+          <h3 class="font-semibold text-gray-900">Questa Settimana</h3>
           <a routerLink="/recommendations" class="text-primary-600 text-sm font-medium hover:text-primary-700">
-            View Recommendations →
+            Suggerimenti →
           </a>
         </div>
         
@@ -154,11 +188,11 @@ import { StorageService } from '../../core/services/storage.service';
         <div class="mt-4 pt-4 border-t border-gray-100">
           <div class="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <p class="text-gray-500">Weekly Target</p>
+              <p class="text-gray-500">Obiettivo Settimanale</p>
               <p class="font-semibold text-gray-900">{{ weeklyProgress()?.planned?.calories || 0 }} kcal</p>
             </div>
             <div>
-              <p class="text-gray-500">Weekly Progress</p>
+              <p class="text-gray-500">Progresso Settimanale</p>
               <p 
                 class="font-semibold"
                 [ngClass]="getDeltaClass(weeklyProgress()?.delta?.calories || 0)"
@@ -173,14 +207,14 @@ import { StorageService } from '../../core/services/storage.service';
 
       <!-- Quick Actions -->
       <div class="grid grid-cols-2 gap-4">
-        <a routerLink="/meals" class="card hover:shadow-lg transition-shadow">
+        <a routerLink="/log" class="card hover:shadow-lg transition-shadow">
           <div class="flex items-center gap-4">
             <div class="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center">
               <span class="text-2xl">🍽️</span>
             </div>
             <div>
-              <p class="font-semibold text-gray-900">Log Meal</p>
-              <p class="text-sm text-gray-500">Track what you ate</p>
+              <p class="font-semibold text-gray-900">Registra Pasto</p>
+              <p class="text-sm text-gray-500">Cosa hai mangiato?</p>
             </div>
           </div>
         </a>
@@ -191,8 +225,8 @@ import { StorageService } from '../../core/services/storage.service';
               <span class="text-2xl">📋</span>
             </div>
             <div>
-              <p class="font-semibold text-gray-900">Diet Plan</p>
-              <p class="text-sm text-gray-500">View or upload plan</p>
+              <p class="font-semibold text-gray-900">Piano Dieta</p>
+              <p class="text-sm text-gray-500">Visualizza o carica</p>
             </div>
           </div>
         </a>
@@ -201,7 +235,7 @@ import { StorageService } from '../../core/services/storage.service';
       <!-- Today's Meals -->
       @if (storage.todayLogs().length > 0) {
         <div class="card">
-          <h3 class="font-semibold text-gray-900 mb-4">Today's Meals</h3>
+          <h3 class="font-semibold text-gray-900 mb-4">Pasti di Oggi</h3>
           <div class="space-y-3">
             @for (meal of storage.todayLogs(); track meal.id) {
               <div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
@@ -232,12 +266,12 @@ import { StorageService } from '../../core/services/storage.service';
           <div class="flex items-start gap-4">
             <span class="text-2xl">⚠️</span>
             <div>
-              <h3 class="font-semibold text-amber-800">No Diet Plan Set</h3>
+              <h3 class="font-semibold text-amber-800">Nessun Piano Dieta</h3>
               <p class="text-sm text-amber-700 mt-1">
-                Upload your nutritionist's diet plan to enable tracking and recommendations.
+                Carica il piano della tua nutrizionista per attivare il tracking e i suggerimenti.
               </p>
               <a routerLink="/diet-plan" class="inline-block mt-3 text-sm font-medium text-amber-800 hover:text-amber-900">
-                Upload Plan →
+                Carica Piano →
               </a>
             </div>
           </div>
@@ -249,10 +283,42 @@ import { StorageService } from '../../core/services/storage.service';
 export class DashboardComponent {
   protected storage = inject(StorageService);
 
-  todayDate = new Date().toLocaleDateString('en-US', {
+  todayDate = new Date().toLocaleDateString('it-IT', {
     weekday: 'long',
-    month: 'long',
-    day: 'numeric'
+    day: 'numeric',
+    month: 'long'
+  });
+
+  // Get next unlogged meal
+  nextMeal = computed(() => {
+    const plan = this.storage.dietPlan();
+    if (!plan) return null;
+    
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    const dayPlan = plan.days.find(d => d.day === today);
+    if (!dayPlan) return null;
+    
+    const todayLogs = this.storage.todayLogs();
+    const loggedMealIds = new Set(todayLogs.map(l => l.plannedMealId));
+    
+    // Find first unlogged meal
+    return dayPlan.meals.find(m => !loggedMealIds.has(m.id)) || null;
+  });
+
+  // Count logged meals today
+  loggedMealsCount = computed(() => {
+    const plan = this.storage.dietPlan();
+    if (!plan) return { logged: 0, total: 0 };
+    
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    const dayPlan = plan.days.find(d => d.day === today);
+    if (!dayPlan) return { logged: 0, total: 0 };
+    
+    const todayLogs = this.storage.todayLogs();
+    const loggedMealIds = new Set(todayLogs.map(l => l.plannedMealId));
+    const logged = dayPlan.meals.filter(m => loggedMealIds.has(m.id)).length;
+    
+    return { logged, total: dayPlan.meals.length };
   });
 
   caloriePercentage = computed(() => {
