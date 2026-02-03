@@ -10,6 +10,12 @@ interface QuickMeal {
   macros: { calories: number; protein: number; carbs: number; fat: number };
 }
 
+interface PortionOption {
+  label: string;
+  value: number;
+  emoji: string;
+}
+
 @Component({
   selector: 'app-meal-log',
   standalone: true,
@@ -214,6 +220,90 @@ interface QuickMeal {
           </div>
         </div>
       }
+
+      <!-- Portion Selection Modal -->
+      @if (selectedMeal()) {
+        <div class="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50" (click)="closePortionModal()">
+          <div 
+            class="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl p-6 animate-fade-in"
+            (click)="$event.stopPropagation()"
+          >
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <span class="text-2xl">{{ getMealIcon(selectedMeal()!.displayType) }}</span>
+                <div>
+                  <h3 class="font-semibold text-gray-900">{{ selectedMeal()!.name }}</h3>
+                  <p class="text-sm text-gray-500">{{ getMealTypeLabel(selectedMeal()!.displayType) }}</p>
+                </div>
+              </div>
+              <button (click)="closePortionModal()" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+
+            <!-- Foods in meal -->
+            @if (selectedMeal()!.foods?.length) {
+              <div class="bg-gray-50 rounded-xl p-3 mb-4 max-h-32 overflow-y-auto">
+                <p class="text-xs text-gray-500 uppercase mb-2">Alimenti:</p>
+                @for (food of selectedMeal()!.foods; track food.name) {
+                  <p class="text-sm text-gray-700">• {{ food.quantity }}{{ food.unit }} {{ food.name }}</p>
+                }
+              </div>
+            }
+
+            <!-- Portion Selector -->
+            <div class="mb-4">
+              <p class="text-sm font-medium text-gray-700 mb-3">Quanto hai mangiato?</p>
+              <div class="flex gap-2 flex-wrap">
+                @for (option of portionOptions; track option.value) {
+                  <button
+                    (click)="selectedPortion.set(option.value)"
+                    class="flex-1 min-w-[60px] py-3 px-2 rounded-xl border-2 transition-all text-center"
+                    [ngClass]="{
+                      'border-primary-500 bg-primary-50 text-primary-700': selectedPortion() === option.value,
+                      'border-gray-200 hover:border-gray-300': selectedPortion() !== option.value
+                    }"
+                  >
+                    <span class="text-lg">{{ option.emoji }}</span>
+                    <p class="text-xs mt-1">{{ option.label }}</p>
+                    <p class="text-xs text-gray-500">{{ option.value }}%</p>
+                  </button>
+                }
+              </div>
+            </div>
+
+            <!-- Adjusted Macros Preview -->
+            @if (adjustedMacros()) {
+              <div class="bg-primary-50 rounded-xl p-4 mb-4">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm text-gray-600">Calorie:</span>
+                  <span class="text-xl font-bold text-primary-700">{{ adjustedMacros()!.calories }} kcal</span>
+                </div>
+                <div class="flex gap-4 mt-2 text-sm text-gray-600">
+                  <span>P: {{ adjustedMacros()!.protein }}g</span>
+                  <span>C: {{ adjustedMacros()!.carbs }}g</span>
+                  <span>G: {{ adjustedMacros()!.fat }}g</span>
+                </div>
+              </div>
+            }
+
+            <!-- Action Buttons -->
+            <div class="flex gap-3">
+              <button 
+                (click)="closePortionModal()"
+                class="flex-1 py-3 border border-gray-300 rounded-xl text-gray-700 font-medium hover:bg-gray-50"
+              >
+                Annulla
+              </button>
+              <button 
+                (click)="confirmLogMeal()"
+                class="flex-1 py-3 bg-primary-600 text-white rounded-xl font-medium hover:bg-primary-700"
+              >
+                ✓ Registra
+              </button>
+            </div>
+          </div>
+        </div>
+      }
     </div>
   `
 })
@@ -248,6 +338,31 @@ export class MealLogComponent {
   showSuccess = signal(false);
   lastLoggedMeal = signal('');
   voiceSupported = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+
+  // Portion modal
+  selectedMeal = signal<(PlannedMeal & { isLogged?: boolean }) | null>(null);
+  selectedPortion = signal(100);
+  
+  portionOptions: PortionOption[] = [
+    { label: 'Metà', value: 50, emoji: '🍽️' },
+    { label: '¾', value: 75, emoji: '🍽️' },
+    { label: 'Tutto', value: 100, emoji: '✅' },
+    { label: 'Extra', value: 125, emoji: '➕' },
+    { label: 'Doppia', value: 150, emoji: '🍽️🍽️' },
+  ];
+
+  // Calculate adjusted macros based on portion
+  adjustedMacros = computed(() => {
+    const meal = this.selectedMeal();
+    if (!meal) return null;
+    const factor = this.selectedPortion() / 100;
+    return {
+      calories: Math.round(meal.macros.calories * factor),
+      protein: Math.round(meal.macros.protein * factor * 10) / 10,
+      carbs: Math.round(meal.macros.carbs * factor * 10) / 10,
+      fat: Math.round(meal.macros.fat * factor * 10) / 10,
+    };
+  });
 
   // Get planned meals for today with logged status
   todayPlannedMeals = computed(() => {
@@ -301,18 +416,34 @@ export class MealLogComponent {
     return icons[type.toLowerCase()] || '🍽️';
   }
 
-  logPlannedMeal(meal: PlannedMeal): void {
+  // Open portion modal instead of directly logging
+  logPlannedMeal(meal: PlannedMeal & { isLogged?: boolean }): void {
+    this.selectedMeal.set(meal);
+    this.selectedPortion.set(100); // Reset to 100%
+  }
+
+  closePortionModal(): void {
+    this.selectedMeal.set(null);
+  }
+
+  confirmLogMeal(): void {
+    const meal = this.selectedMeal();
+    const macros = this.adjustedMacros();
+    if (!meal || !macros) return;
+
     const today = new Date().toISOString().split('T')[0];
+    const portionText = this.selectedPortion() !== 100 ? ` (${this.selectedPortion()}%)` : '';
     
     this.storage.logMeal({
       date: today,
       plannedMealId: meal.id,
-      name: meal.name,
-      type: meal.displayType, // Use displayType for log compatibility
-      macros: meal.macros,
+      name: meal.name + portionText,
+      type: meal.displayType,
+      macros: macros,
     });
     
-    this.showSuccessMessage(`${meal.name} - ${meal.macros.calories} kcal`);
+    this.showSuccessMessage(`${meal.name}${portionText} - ${macros.calories} kcal`);
+    this.closePortionModal();
   }
 
   logQuickMeal(meal: QuickMeal): void {
